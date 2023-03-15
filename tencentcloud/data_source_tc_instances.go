@@ -86,7 +86,7 @@ func dataSourceTencentCloudInstances() *schema.Resource {
 				Description: "An information list of cvm instance. Each element contains the following attributes:",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"instance_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of the instances.",
@@ -309,7 +309,7 @@ func dataSourceTencentCloudInstancesRead(d *schema.ResourceData, meta interface{
 	ids := make([]string, 0, len(instances))
 	for _, instance := range instances {
 		mapping := map[string]interface{}{
-			"instance_id":                instance.InstanceId,
+			"id":                         instance.InstanceId,
 			"instance_name":              instance.InstanceName,
 			"instance_type":              instance.InstanceType,
 			"cpu":                        instance.CPU,
