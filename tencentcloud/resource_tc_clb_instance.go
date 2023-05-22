@@ -293,6 +293,12 @@ func resourceTencentCloudClbInstance() *schema.Resource {
 				Default:     false,
 				Description: "Whether the target allow flow come from clb. If value is true, only check security group of clb, or check both clb and backend instance security group.",
 			},
+			"deletion_protection": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				Description: "Protect from deletion.",
+			},
 			"master_zone_id": {
 				Type:        schema.TypeString,
 				Optional:    true,
@@ -565,16 +571,21 @@ func resourceTencentCloudClbInstanceCreate(d *schema.ResourceData, meta interfac
 		}
 	}
 
-	if targetRegionInfoRegion != "" {
-		isLoadBalancePassToTgt := d.Get("load_balancer_pass_to_target").(bool)
-		targetRegionInfo := clb.TargetRegionInfo{
-			Region: &targetRegionInfoRegion,
-			VpcId:  &targetRegionInfoVpcId,
-		}
+	if v, ok := d.GetOkExists("deletion_protection"); targetRegionInfoRegion != "" || ok {
 		mRequest := clb.NewModifyLoadBalancerAttributesRequest()
-		mRequest.LoadBalancerId = helper.String(clbId)
-		mRequest.TargetRegionInfo = &targetRegionInfo
-		mRequest.LoadBalancerPassToTarget = &isLoadBalancePassToTgt
+		if targetRegionInfoRegion != "" {
+			isLoadBalancePassToTgt := d.Get("load_balancer_pass_to_target").(bool)
+			targetRegionInfo := clb.TargetRegionInfo{
+				Region: &targetRegionInfoRegion,
+				VpcId:  &targetRegionInfoVpcId,
+			}
+			mRequest.LoadBalancerId = helper.String(clbId)
+			mRequest.TargetRegionInfo = &targetRegionInfo
+			mRequest.LoadBalancerPassToTarget = &isLoadBalancePassToTgt
+		}
+		if ok {
+			mRequest.DeleteProtect = helper.Bool(v.(bool))
+		}
 		err := resource.Retry(writeRetryTimeout, func() *resource.RetryError {
 			mResponse, e := meta.(*TencentCloudClient).apiV3Conn.UseClbClient().ModifyLoadBalancerAttributes(mRequest)
 			if e != nil {
@@ -718,6 +729,11 @@ func resourceTencentCloudClbInstanceUpdate(d *schema.ResourceData, meta interfac
 			VpcId:  &vpcId,
 		}
 		request.TargetRegionInfo = &targetRegionInfo
+	}
+
+	if d.HasChange("deletion_protection") {
+		changed = true
+		request.DeleteProtect = helper.Bool(d.Get("deletion_protection").(bool))
 	}
 
 	if d.HasChange("internet_charge_type") || d.HasChange("internet_bandwidth_max_out") {
