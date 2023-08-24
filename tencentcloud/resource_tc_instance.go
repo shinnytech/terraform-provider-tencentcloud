@@ -1267,7 +1267,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		request.EnhancedService = &cvm.EnhancedService{}
 		if d.HasChange("disable_security_service") {
 			v := d.Get("disable_security_service")
-			securityService := v.(bool)
+			securityService := !(v.(bool))
 			request.EnhancedService.SecurityService = &cvm.RunSecurityServiceEnabled{
 				Enabled: &securityService,
 			}
