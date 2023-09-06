@@ -2,12 +2,13 @@ package tencentcloud
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"log"
 	"time"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-
+	_ "github.com/go-sql-driver/mysql"
 	cdb "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cdb/v20170320"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/errors"
 	"github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/connectivity"
@@ -302,7 +303,7 @@ func (me *MysqlService) DescribeCaresParameters(ctx context.Context, instanceId 
 }
 
 func (me *MysqlService) CreateAccount(ctx context.Context, mysqlId string,
-	accountName, accountHost, accountPassword, accountDescription string) (asyncRequestId string, errRet error) {
+	accountName, accountHost, accountPassword, accountDescription string, maxUserConnections int64) (asyncRequestId string, errRet error) {
 
 	logId := getLogId(ctx)
 
@@ -315,6 +316,7 @@ func (me *MysqlService) CreateAccount(ctx context.Context, mysqlId string,
 	request.Password = &accountPassword
 	request.Accounts = accountInfos
 	request.Description = &accountDescription
+	request.MaxUserConnections = &maxUserConnections
 
 	defer func() {
 		if errRet != nil {
@@ -354,6 +356,62 @@ func (me *MysqlService) ModifyAccountPassword(ctx context.Context, mysqlId strin
 	}()
 	ratelimit.Check(request.GetAction())
 	response, err := me.client.UseMysqlClient().ModifyAccountPassword(request)
+	if err != nil {
+		errRet = err
+		return
+	}
+	asyncRequestId = *response.Response.AsyncRequestId
+	return
+}
+
+func (me *MysqlService) ModifyAccountMaxUserConnections(ctx context.Context, mysqlId, accountName, accountHost string, maxUserConnections int64) (asyncRequestId string, errRet error) {
+
+	logId := getLogId(ctx)
+
+	request := cdb.NewModifyAccountMaxUserConnectionsRequest()
+
+	var accountInfo = cdb.Account{User: &accountName, Host: &accountHost}
+	var accountInfos = []*cdb.Account{&accountInfo}
+
+	request.InstanceId = &mysqlId
+	request.Accounts = accountInfos
+	request.MaxUserConnections = &maxUserConnections
+
+	defer func() {
+		if errRet != nil {
+			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), errRet.Error())
+		}
+	}()
+	ratelimit.Check(request.GetAction())
+	response, err := me.client.UseMysqlClient().ModifyAccountMaxUserConnections(request)
+	if err != nil {
+		errRet = err
+		return
+	}
+	asyncRequestId = *response.Response.AsyncRequestId
+	return
+}
+
+func (me *MysqlService) ModifyAccountHost(ctx context.Context, mysqlId, accountName, host, newHost string) (asyncRequestId string, errRet error) {
+
+	logId := getLogId(ctx)
+
+	request := cdb.NewModifyAccountHostRequest()
+
+	request.InstanceId = &mysqlId
+	request.User = &accountName
+	request.Host = &host
+	request.NewHost = &newHost
+
+	defer func() {
+		if errRet != nil {
+			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), errRet.Error())
+		}
+	}()
+	ratelimit.Check(request.GetAction())
+	response, err := me.client.UseMysqlClient().ModifyAccountHost(request)
 	if err != nil {
 		errRet = err
 		return
@@ -2529,4 +2587,88 @@ func (me *MysqlService) DescribeMysqlUserTaskByFilter(ctx context.Context, param
 	}
 
 	return
+}
+
+func (me *MysqlService) CreateDatabase(ctx context.Context, mysqlId string,
+	databaseName, characterSet string) (requestId string, errRet error) {
+
+	logId := getLogId(ctx)
+
+	request := cdb.NewCreateDatabaseRequest()
+
+	request.InstanceId = &mysqlId
+	request.DBName = &databaseName
+	request.CharacterSetName = &characterSet
+
+	defer func() {
+		if errRet != nil {
+			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), errRet.Error())
+		}
+	}()
+	ratelimit.Check(request.GetAction())
+	response, err := me.client.UseMysqlClient().CreateDatabase(request)
+	if err != nil {
+		errRet = err
+		return
+	}
+	requestId = *response.Response.RequestId
+	return
+}
+
+func (me *MysqlService) DescribeDatabase(ctx context.Context, mysqlId string,
+	databaseName string) (resp cdb.DescribeDatabasesResponseParams, errRet error) {
+	logId := getLogId(ctx)
+
+	request := cdb.NewDescribeDatabasesRequest()
+	request.InstanceId = &mysqlId
+	request.DatabaseRegexp = &databaseName
+
+	defer func() {
+		if errRet != nil {
+			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), errRet.Error())
+		}
+	}()
+	ratelimit.Check(request.GetAction())
+	response, err := me.client.UseMysqlClient().DescribeDatabasesWithContext(ctx, request)
+	if err != nil {
+		errRet = err
+		return
+	}
+	resp = *response.Response
+	return
+}
+
+func (me *MysqlService) DeleteDatabase(password, privateIP, databaseName, characterSet string) (errRet error) {
+	//logId := getLogId(ctx)
+
+	db, err := sql.Open("mysql",
+		fmt.Sprintf("root:%s@tcp(%s:3306)/%s?charset=%s&parseTime=True", password, privateIP, databaseName, characterSet),
+	)
+	if err != nil {
+		errRet = fmt.Errorf("open mysql failed, err: %w", err)
+		return
+	}
+
+	defer func() {
+		errRet = db.Close()
+	}()
+
+	db.SetConnMaxLifetime(time.Minute * 3)
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(10)
+
+	// Open doesn't open a connection. Validate DSN data:
+	err = db.Ping()
+	if err != nil {
+		errRet = fmt.Errorf("mysql not ready or incorrect connection parameters, err: %w", err)
+	}
+
+	_, err = db.Exec(fmt.Sprintf("DROP DATABASE %s", databaseName))
+	if err != nil {
+		errRet = err
+		return
+	}
+	return nil
 }

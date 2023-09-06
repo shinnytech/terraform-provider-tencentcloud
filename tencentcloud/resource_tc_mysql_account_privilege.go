@@ -3,15 +3,17 @@ Provides a mysql account privilege resource to grant different access privilege 
 
 ~> **NOTE:** It has been deprecated and replaced by  tencentcloud_mysql_privilege.
 
-Example Usage
+# Example Usage
 
 ```hcl
-resource "tencentcloud_mysql_account_privilege" "default" {
-  mysql_id       = "terraform-test-local-database"
-  account_name   = "tf_account"
-  privileges     = ["SELECT"]
-  database_names = ["instance.name"]
-}
+
+	resource "tencentcloud_mysql_account_privilege" "default" {
+	  mysql_id       = "terraform-test-local-database"
+	  account_name   = "tf_account"
+	  privileges     = ["SELECT"]
+	  database_names = ["instance.name"]
+	}
+
 ```
 */
 package tencentcloud
@@ -159,7 +161,7 @@ func resourceTencentCloudMysqlAccountPrivilegeRead(d *schema.ResourceData, meta 
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("Describe mysql acounts fails, reaseon %s", err.Error())
+		return fmt.Errorf("describe mysql accounts fails, reaseon %w", err)
 	}
 	if !onlineHas {
 		return nil
@@ -219,7 +221,7 @@ func resourceTencentCloudMysqlAccountPrivilegeRead(d *schema.ResourceData, meta 
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("Describe mysql acounts privilege fails, reaseon %s", err.Error())
+		return fmt.Errorf("describe mysql accounts privilege fails, reaseon %w", err)
 	}
 	_ = d.Set("account_name", privilegeId.AccountName)
 	_ = d.Set("account_host", privilegeId.AccountHost)
