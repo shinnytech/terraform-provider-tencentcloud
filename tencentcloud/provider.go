@@ -1856,6 +1856,7 @@ func Provider() *schema.Provider {
 			"tencentcloud_kubernetes_serverless_node_pool":             resourceTkeServerLessNodePool(),
 			"tencentcloud_kubernetes_backup_storage_location":          resourceTencentCloudTkeBackupStorageLocation(),
 			"tencentcloud_mysql_backup_policy":                         resourceTencentCloudMysqlBackupPolicy(),
+			"tencentcloud_mysql_backup_policy_v2":                      resourceTencentCloudMysqlBackupPolicyV2(),
 			"tencentcloud_mysql_account":                               resourceTencentCloudMysqlAccount(),
 			"tencentcloud_mysql_account_privilege":                     resourceTencentCloudMysqlAccountPrivilege(),
 			"tencentcloud_mysql_privilege":                             resourceTencentCloudMysqlPrivilege(),
