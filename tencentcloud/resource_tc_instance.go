@@ -438,6 +438,12 @@ func resourceTencentCloudInstance() *schema.Resource {
 				Default:     false,
 				Description: "Disable enhance service for monitor, it is enabled by default. When this options is set, monitor agent won't be installed. Modifying will cause the instance reset.",
 			},
+			"disable_automation_service": {
+				Type:        schema.TypeBool,
+				Optional:    true,
+				Default:     false,
+				Description: "Disable enhance service for automation, it is enabled by default. When this options is set, automation agent won't be installed. Modifying will cause the instance reset.",
+			},
 			// login
 			"key_name": {
 				Type:          schema.TypeString,
@@ -723,6 +729,12 @@ func resourceTencentCloudInstanceCreate(d *schema.ResourceData, meta interface{}
 		monitorService := !(v.(bool))
 		request.EnhancedService.MonitorService = &cvm.RunMonitorServiceEnabled{
 			Enabled: &monitorService,
+		}
+	}
+	if v, ok := d.GetOkExists("disable_automation_service"); ok {
+		automationService := !(v.(bool))
+		request.EnhancedService.AutomationService = &cvm.RunAutomationServiceEnabled{
+			Enabled: &automationService,
 		}
 	}
 
@@ -1248,6 +1260,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		d.HasChange("hostname") ||
 		d.HasChange("disable_security_service") ||
 		d.HasChange("disable_monitor_service") ||
+		d.HasChange("disable_automation_service") ||
 		d.HasChange("keep_image_login") {
 
 		request := cvm.NewResetInstanceRequest()
@@ -1275,6 +1288,14 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 			monitorService := !(v.(bool))
 			request.EnhancedService.MonitorService = &cvm.RunMonitorServiceEnabled{
 				Enabled: &monitorService,
+			}
+		}
+
+		if d.HasChange("disable_automation_service") {
+			v := d.Get("disable_automation_service")
+			automationService := !(v.(bool))
+			request.EnhancedService.AutomationService = &cvm.RunAutomationServiceEnabled{
+				Enabled: &automationService,
 			}
 		}
 
