@@ -804,7 +804,7 @@ func resourceTencentCloudInstanceCreate(d *schema.ResourceData, meta interface{}
 					},
 					{
 						Name:   common.StringPtr("instance-charge-type"),
-						Values: common.StringPtrs([]string{"POSTPAID_BY_HOUR"}),
+						Values: common.StringPtrs([]string{*helper.String(d.Get("instance_charge_type").(string))}),
 					},
 				}
 				response, err := cvmService.client.UseCvmClient().DescribeZoneInstanceConfigInfos(hintReq)
@@ -1092,6 +1092,9 @@ func resourceTencentCloudInstanceRead(d *schema.ResourceData, meta interface{}) 
 	if len(instance.LoginSettings.KeyIds) > 0 {
 		_ = d.Set("key_name", instance.LoginSettings.KeyIds[0])
 		_ = d.Set("key_ids", instance.LoginSettings.KeyIds)
+	} else {
+		_ = d.Set("key_name", "")
+		_ = d.Set("key_ids", []*string{})
 	}
 	if instance.LoginSettings.KeepImageLogin != nil {
 		_ = d.Set("keep_image_login", *instance.LoginSettings.KeepImageLogin == CVM_IMAGE_LOGIN)
@@ -1307,12 +1310,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		}
 
 		if v, ok := d.GetOk("key_ids"); ok {
-			if (v.(*schema.Set).Len()) == 1 && v.(*schema.Set).List()[0] == "" {
-				// 为了兼容老版本，如果key_ids是单个空字符串则置空
-				request.LoginSettings.KeyIds = nil
-			} else {
-				request.LoginSettings.KeyIds = helper.InterfacesStringsPoint(v.(*schema.Set).List())
-			}
+			request.LoginSettings.KeyIds = helper.InterfacesStringsPoint(v.(*schema.Set).List())
 		} else if v, ok := d.GetOk("key_name"); ok {
 			request.LoginSettings.KeyIds = []*string{helper.String(v.(string))}
 		}
