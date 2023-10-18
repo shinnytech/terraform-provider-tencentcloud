@@ -2,13 +2,12 @@ package tencentcloud
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"log"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	cdb "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cdb/v20170320"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/errors"
 	"github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/connectivity"
@@ -2682,37 +2681,4 @@ func (me *MysqlService) DescribeDatabase(ctx context.Context, mysqlId string,
 	}
 	resp = *response.Response
 	return
-}
-
-func (me *MysqlService) DeleteDatabase(password, privateIP, databaseName, characterSet string) (errRet error) {
-	//logId := getLogId(ctx)
-
-	db, err := sql.Open("mysql",
-		fmt.Sprintf("root:%s@tcp(%s:3306)/%s?charset=%s&parseTime=True", password, privateIP, databaseName, characterSet),
-	)
-	if err != nil {
-		errRet = fmt.Errorf("open mysql failed, err: %w", err)
-		return
-	}
-
-	defer func() {
-		errRet = db.Close()
-	}()
-
-	db.SetConnMaxLifetime(time.Minute * 3)
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(10)
-
-	// Open doesn't open a connection. Validate DSN data:
-	err = db.Ping()
-	if err != nil {
-		errRet = fmt.Errorf("mysql not ready or incorrect connection parameters, err: %w", err)
-	}
-
-	_, err = db.Exec(fmt.Sprintf("DROP DATABASE %s", databaseName))
-	if err != nil {
-		errRet = err
-		return
-	}
-	return nil
 }
