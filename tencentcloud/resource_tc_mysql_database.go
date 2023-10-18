@@ -18,7 +18,6 @@ func resourceTencentCloudMysqlDatabase() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceTencentCloudMysqlDatabaseCreate,
 		Read:   resourceTencentCloudMysqlDatabaseRead,
-		Update: resourceTencentCloudMysqlDatabaseUpdate,
 		Delete: resourceTencentCloudMysqlDatabaseDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
@@ -108,12 +107,6 @@ func resourceTencentCloudMysqlDatabaseRead(d *schema.ResourceData, meta interfac
 		d.SetId("")
 		return nil
 	}
-
-	return nil
-}
-
-func resourceTencentCloudMysqlDatabaseUpdate(d *schema.ResourceData, _ interface{}) error {
-	defer logElapsed("resource.tencentcloud_mysql_database.update")()
 
 	return nil
 }
