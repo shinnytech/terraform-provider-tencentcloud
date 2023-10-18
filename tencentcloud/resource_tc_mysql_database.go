@@ -7,9 +7,11 @@ package tencentcloud
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"strings"
 )
 
 func resourceTencentCloudMysqlDatabase() *schema.Resource {
@@ -129,22 +131,11 @@ func resourceTencentCloudMysqlDatabaseUpdate(d *schema.ResourceData, _ interface
 	return nil
 }
 
+// 本资源并不会直接删除database，数据库会随实例一起删除。如果保留实例则需要手动删除数据库。
 func resourceTencentCloudMysqlDatabaseDelete(d *schema.ResourceData, meta interface{}) error {
 	defer logElapsed("resource.tencentcloud_mysql_database.delete")()
 
-	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
-	var (
-		name         = d.Get("name").(string)
-		characterSet = d.Get("character_set").(string)
-		password     = d.Get("password").(string)
-		privateIP    = d.Get("private_ip").(string)
-	)
-
-	// drop database
-	err := mysqlService.DeleteDatabase(password, privateIP, name, characterSet)
-	if err != nil {
-		return fmt.Errorf("删除 mysql 数据库失败, 错误为: %w", err)
-	}
+	log.Printf("[INFO] Terraform 不会删除数据库 %s。\n如果您一同删除了数据库实例则无需操作。\n如果您需要保留数据库实例的情况下单独删除数据库，则您需前往腾讯云控制台手动删除数据库", d.Id())
 	d.SetId("")
 	return nil
 }
