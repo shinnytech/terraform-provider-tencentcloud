@@ -43,19 +43,6 @@ func resourceTencentCloudMysqlDatabase() *schema.Resource {
 				Default:     "utf8mb4",
 				Description: "Database character set, default is `utf8mb4`.",
 			},
-			"password": {
-				// 由instance资源传入，因此不需要ForceNew
-				Type:        schema.TypeString,
-				Required:    true,
-				Sensitive:   true,
-				Description: "root password for deleting database",
-			},
-			"private_ip": {
-				// 由instance资源传入，因此不需要ForceNew
-				Type:        schema.TypeString,
-				Required:    true,
-				Description: "database ip for deleting database",
-			},
 		},
 	}
 }
