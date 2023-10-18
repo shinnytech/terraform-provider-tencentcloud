@@ -9,7 +9,6 @@ require (
 	github.com/bflad/tfproviderlint v0.14.0
 	github.com/client9/misspell v0.3.4
 	github.com/fatih/color v1.15.0
-	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golangci/golangci-lint v1.52.2
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
