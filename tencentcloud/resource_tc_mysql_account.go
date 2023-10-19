@@ -110,12 +110,14 @@ func resourceTencentCloudMysqlAccount() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     MYSQL_DEFAULT_ACCOUNT_HOST,
+				ForceNew:    true,
 				Description: "Account host, default is `%`.",
 			},
 			"password": {
 				Type:         schema.TypeString,
 				Required:     true,
 				Sensitive:    true,
+				ForceNew:     true, // password更新可能会导致下游服务配置不可用，所以需要级联更新
 				ValidateFunc: validateMysqlPassword,
 				Description:  "Operation password.",
 			},
@@ -303,36 +305,6 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 
 	}
 
-	if d.HasChange("password") {
-
-		asyncRequestId, err := mysqlService.ModifyAccountPassword(ctx, mysqlId, accountName, accountHost, d.Get("password").(string))
-		if err != nil {
-			return err
-		}
-
-		err = resource.Retry(readRetryTimeout, func() *resource.RetryError {
-			taskStatus, message, err := mysqlService.DescribeAsyncRequestInfo(ctx, asyncRequestId)
-			if err != nil {
-				return resource.NonRetryableError(err)
-			}
-			if taskStatus == MYSQL_TASK_STATUS_SUCCESS {
-				return nil
-			}
-			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify mysql account password %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
-			}
-			err = fmt.Errorf("modify mysql account password task status is %s, we won't wait for it finish, it show message:%s", taskStatus,
-				message)
-			return resource.NonRetryableError(err)
-		})
-
-		if err != nil {
-			log.Printf("[CRITAL] %s modify mysql account password fail, reason: %s\n ", logId, err.Error())
-			return err
-		}
-
-	}
-
 	if d.HasChange("max_user_connections") {
 		var maxUserConnections int64
 		if v, ok := d.GetOkExists("max_user_connections"); ok {
@@ -363,42 +335,6 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 			return err
 		}
 
-	}
-
-	if d.HasChange("host") {
-		oldHost, newHost := d.GetChange("host")
-		asyncRequestId, err := mysqlService.ModifyAccountHost(ctx, mysqlId, accountName, oldHost.(string), newHost.(string))
-		if err != nil {
-			return err
-		}
-
-		err = resource.Retry(readRetryTimeout, func() *resource.RetryError {
-			taskStatus, message, err := mysqlService.DescribeAsyncRequestInfo(ctx, asyncRequestId)
-			if err != nil {
-				return resource.NonRetryableError(err)
-			}
-			if taskStatus == MYSQL_TASK_STATUS_SUCCESS {
-				return nil
-			}
-			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify account host %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
-			}
-			err = fmt.Errorf("modify mysql account host task status is %s, we won't wait for it finish, it show message:%s", taskStatus, message)
-			return resource.NonRetryableError(err)
-		})
-
-		if err != nil {
-			log.Printf("[CRITAL] %s modify mysql account host fail, reason: %s\n ", logId, err.Error())
-			return err
-		}
-
-		resourceId := fmt.Sprintf("%s%s%s", mysqlId, FILED_SP, accountName)
-
-		if newHost.(string) != MYSQL_DEFAULT_ACCOUNT_HOST {
-			resourceId += FILED_SP + newHost.(string)
-		}
-
-		d.SetId(resourceId)
 	}
 
 	d.Partial(false)
