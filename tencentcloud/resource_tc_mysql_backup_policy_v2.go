@@ -264,6 +264,8 @@ func resourceTencentCloudMysqlBackupPolicyV2Delete(ctx context.Context, d *schem
 	return nil
 }
 
+// parseTimeWindow 经腾讯云api返回的时间格式转换成terraform默认的字符串空值
+// **注意** 空字符串也可以被腾讯云api接受，但是空字符串经过腾讯云处理后从api返回的是"00:00-00:00"
 func parseTimeWindow(window *string) string {
 	if *window == "00:00-00:00" {
 		return ""
