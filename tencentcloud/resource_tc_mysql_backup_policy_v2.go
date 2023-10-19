@@ -217,13 +217,13 @@ func resourceTencentCloudMysqlBackupPolicyV2Update(ctx context.Context, d *schem
 		return diag.Errorf("`backup_model` only support 'physical'")
 	}
 	if d.HasChangeExcept("mysql_id") {
-		monday := backupWindow["Monday"].(string)
-		tuesday := backupWindow["Tuesday"].(string)
-		wednesday := backupWindow["Wednesday"].(string)
-		thursday := backupWindow["Thursday"].(string)
-		friday := backupWindow["Friday"].(string)
-		saturday := backupWindow["Saturday"].(string)
-		sunday := backupWindow["Sunday"].(string)
+		monday, _ := backupWindow["Monday"].(string)
+		tuesday, _ := backupWindow["Tuesday"].(string)
+		wednesday, _ := backupWindow["Wednesday"].(string)
+		thursday, _ := backupWindow["Thursday"].(string)
+		friday, _ := backupWindow["Friday"].(string)
+		saturday, _ := backupWindow["Saturday"].(string)
+		sunday, _ := backupWindow["Sunday"].(string)
 		timeWindow := cdb.CommonTimeWindow{
 			Monday:    &monday,
 			Tuesday:   &tuesday,
