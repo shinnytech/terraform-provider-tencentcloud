@@ -117,7 +117,6 @@ func resourceTencentCloudMysqlAccount() *schema.Resource {
 				Type:         schema.TypeString,
 				Required:     true,
 				Sensitive:    true,
-				ForceNew:     true, // password更新可能会导致下游服务配置不可用，所以需要级联更新
 				ValidateFunc: validateMysqlPassword,
 				Description:  "Operation password.",
 			},
@@ -300,6 +299,36 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 
 		if err != nil {
 			log.Printf("[CRITAL] %s modify mysql account description fail, reason:%s\n ", logId, err.Error())
+			return err
+		}
+
+	}
+
+	if d.HasChange("password") {
+
+		asyncRequestId, err := mysqlService.ModifyAccountPassword(ctx, mysqlId, accountName, accountHost, d.Get("password").(string))
+		if err != nil {
+			return err
+		}
+
+		err = resource.Retry(readRetryTimeout, func() *resource.RetryError {
+			taskStatus, message, err := mysqlService.DescribeAsyncRequestInfo(ctx, asyncRequestId)
+			if err != nil {
+				return resource.NonRetryableError(err)
+			}
+			if taskStatus == MYSQL_TASK_STATUS_SUCCESS {
+				return nil
+			}
+			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
+				return resource.RetryableError(fmt.Errorf("%s modify mysql account password %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
+			}
+			err = fmt.Errorf("modify mysql account password task status is %s, we won't wait for it finish, it show message:%s", taskStatus,
+				message)
+			return resource.NonRetryableError(err)
+		})
+
+		if err != nil {
+			log.Printf("[CRITAL] %s modify mysql account password fail, reason: %s\n ", logId, err.Error())
 			return err
 		}
 
