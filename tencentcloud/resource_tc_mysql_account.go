@@ -166,9 +166,9 @@ func resourceTencentCloudMysqlAccountCreate(d *schema.ResourceData, meta interfa
 			return nil
 		}
 		if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-			return resource.RetryableError(fmt.Errorf("%s create account %s.%s task  status is %s", mysqlId, accountName, accountHost, taskStatus))
+			return resource.RetryableError(fmt.Errorf("%s create account %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
 		}
-		err = fmt.Errorf("%s create account task status is %s,we won't wait for it finish ,it show message:%s", mysqlId, taskStatus, message)
+		err = fmt.Errorf("%s create account task status is %s, we won't wait for it finish, it show message:%s", mysqlId, taskStatus, message)
 		return resource.NonRetryableError(err)
 	})
 
@@ -290,14 +290,14 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 				return nil
 			}
 			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify account  description %s.%s task  status is %s", mysqlId, accountName, accountHost, taskStatus))
+				return resource.RetryableError(fmt.Errorf("%s modify account description %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
 			}
-			err = fmt.Errorf("modify mysql account description task status is %s,we won't wait for it finish ,it show message:%s", taskStatus, message)
+			err = fmt.Errorf("modify mysql account description task status is %s, we won't wait for it finish ,it show message: %s", taskStatus, message)
 			return resource.NonRetryableError(err)
 		})
 
 		if err != nil {
-			log.Printf("[CRITAL]%s modify mysql account description fail, reason:%s\n ", logId, err.Error())
+			log.Printf("[CRITAL] %s modify mysql account description fail, reason:%s\n ", logId, err.Error())
 			return err
 		}
 
@@ -319,15 +319,15 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 				return nil
 			}
 			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify mysql account password %s.%s task  status is %s", mysqlId, accountName, accountHost, taskStatus))
+				return resource.RetryableError(fmt.Errorf("%s modify mysql account password %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
 			}
-			err = fmt.Errorf("modify mysql account password task status is %s,we won't wait for it finish ,it show message:%s", taskStatus,
+			err = fmt.Errorf("modify mysql account password task status is %s, we won't wait for it finish, it show message:%s", taskStatus,
 				message)
 			return resource.NonRetryableError(err)
 		})
 
 		if err != nil {
-			log.Printf("[CRITAL]%s modify mysql account password fail, reason:%s\n ", logId, err.Error())
+			log.Printf("[CRITAL] %s modify mysql account password fail, reason: %s\n ", logId, err.Error())
 			return err
 		}
 
@@ -352,14 +352,14 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 				return nil
 			}
 			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify mysql account maxUserConnections %s task  status is %s", mysqlId, accountName, taskStatus))
+				return resource.RetryableError(fmt.Errorf("%s modify mysql account maxUserConnections %s task status is %s", mysqlId, accountName, taskStatus))
 			}
-			err = fmt.Errorf("modify mysql account maxUserConnections task status is %s,we won't wait for it finish ,it show message:%s", taskStatus, message)
+			err = fmt.Errorf("modify mysql account maxUserConnections task status is %s, we won't wait for it finish, it show message:%s", taskStatus, message)
 			return resource.NonRetryableError(err)
 		})
 
 		if err != nil {
-			log.Printf("[CRITAL]%s modify mysql account maxUserConnections fail, reason:%s\n ", logId, err.Error())
+			log.Printf("[CRITAL] %s modify mysql account maxUserConnections fail, reason: %s\n ", logId, err.Error())
 			return err
 		}
 
@@ -381,14 +381,14 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 				return nil
 			}
 			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify account  host %s.%s task  status is %s", mysqlId, accountName, accountHost, taskStatus))
+				return resource.RetryableError(fmt.Errorf("%s modify account host %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
 			}
-			err = fmt.Errorf("modify mysql account host task status is %s,we won't wait for it finish ,it show message:%s", taskStatus, message)
+			err = fmt.Errorf("modify mysql account host task status is %s, we won't wait for it finish, it show message:%s", taskStatus, message)
 			return resource.NonRetryableError(err)
 		})
 
 		if err != nil {
-			log.Printf("[CRITAL]%s modify mysql account host fail, reason:%s\n ", logId, err.Error())
+			log.Printf("[CRITAL] %s modify mysql account host fail, reason: %s\n ", logId, err.Error())
 			return err
 		}
 
@@ -439,9 +439,9 @@ func resourceTencentCloudMysqlAccountDelete(d *schema.ResourceData, meta interfa
 			return nil
 		}
 		if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-			return resource.RetryableError(fmt.Errorf("%s delete mysql account %s.%s task  status is %s", mysqlId, accountName, accountHost, taskStatus))
+			return resource.RetryableError(fmt.Errorf("%s delete mysql account %s.%s task status is %s", mysqlId, accountName, accountHost, taskStatus))
 		}
-		err = fmt.Errorf("delete mysql account  task status is %s,we won't wait for it finish ,it show message:%s", taskStatus,
+		err = fmt.Errorf("delete mysql account task status is %s,we won't wait for it finish, it show message: %s", taskStatus,
 			message)
 		return resource.NonRetryableError(err)
 	})
