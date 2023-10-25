@@ -1,24 +1,26 @@
 /*
 Use this data source to query images.
 
-Example Usage
+# Example Usage
 
 ```hcl
-data "tencentcloud_images" "foo" {
-  image_type = ["PUBLIC_IMAGE"]
-  os_name    = "centos 7.5"
-}
+
+	data "tencentcloud_images" "foo" {
+	  image_type = ["PUBLIC_IMAGE"]
+	  os_name    = "centos 7.5"
+	}
+
 ```
 */
 package tencentcloud
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"regexp"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	cvm "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
@@ -27,7 +29,7 @@ import (
 
 func dataSourceTencentCloudImages() *schema.Resource {
 	return &schema.Resource{
-		Read: dataSourceTencentCloudImagesRead,
+		ReadContext: dataSourceTencentCloudImagesRead,
 
 		Schema: map[string]*schema.Schema{
 			"image_id": {
@@ -71,6 +73,11 @@ func dataSourceTencentCloudImages() *schema.Resource {
 				Description: "An information list of image. Each element contains the following attributes:",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "ID of the image.",
+						},
 						"image_id": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -177,11 +184,10 @@ func dataSourceTencentCloudImages() *schema.Resource {
 	}
 }
 
-func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) error {
+func dataSourceTencentCloudImagesRead(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("data_source.tencentcloud_images.read")()
 
 	logId := getLogId(contextNil)
-	ctx := context.WithValue(context.TODO(), logIdKey, logId)
 
 	cvmService := CvmService{
 		client: meta.(*TencentCloudClient).apiV3Conn,
@@ -225,7 +231,7 @@ func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) 
 		if imageName != "" {
 			imageNameRegex, err = regexp.Compile(imageName)
 			if err != nil {
-				return fmt.Errorf("image_name_regex format error,%s", err.Error())
+				return diag.Errorf("image_name_regex format error,%s", err.Error())
 			}
 		}
 	}
@@ -240,7 +246,7 @@ func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) 
 	}
 
 	var images []*cvm.Image
-	err = resource.Retry(readRetryTimeout, func() *resource.RetryError {
+	err = resource.RetryContext(ctx, readRetryTimeout, func() *resource.RetryError {
 		var e error
 		images, e = cvmService.DescribeImagesByFilter(ctx, filter, instanceType)
 		if e != nil {
@@ -249,7 +255,7 @@ func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) 
 		return nil
 	})
 	if err != nil {
-		return err
+		return diag.FromErr(err)
 	}
 
 	var results []*cvm.Image
@@ -279,10 +285,11 @@ func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) 
 	for _, image := range results {
 		snapshots, err := imagesReadSnapshotByIds(ctx, cbsService, image)
 		if err != nil {
-			return err
+			return diag.FromErr(err)
 		}
 
 		mapping := map[string]interface{}{
+			"id":                 image.ImageId,
 			"image_id":           image.ImageId,
 			"os_name":            image.OsName,
 			"image_type":         image.ImageType,
@@ -307,13 +314,13 @@ func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) 
 	err = d.Set("images", imageList)
 	if err != nil {
 		log.Printf("[CRITAL]%s provider set image list fail, reason:%s\n ", logId, err.Error())
-		return err
+		return diag.FromErr(err)
 	}
 
 	output, ok := d.GetOk("result_output_file")
 	if ok && output.(string) != "" {
 		if err := writeToFile(output.(string), imageList); err != nil {
-			return err
+			return diag.FromErr(err)
 		}
 	}
 
