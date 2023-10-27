@@ -435,33 +435,6 @@ func (me *MysqlService) ModifyAccountMaxUserConnections(ctx context.Context, mys
 	return
 }
 
-func (me *MysqlService) ModifyAccountHost(ctx context.Context, mysqlId, accountName, host, newHost string) (asyncRequestId string, errRet error) {
-
-	logId := getLogId(ctx)
-
-	request := cdb.NewModifyAccountHostRequest()
-
-	request.InstanceId = &mysqlId
-	request.User = &accountName
-	request.Host = &host
-	request.NewHost = &newHost
-
-	defer func() {
-		if errRet != nil {
-			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
-				logId, request.GetAction(), request.ToJsonString(), errRet.Error())
-		}
-	}()
-	ratelimit.Check(request.GetAction())
-	response, err := me.client.UseMysqlClient().ModifyAccountHost(request)
-	if err != nil {
-		errRet = err
-		return
-	}
-	asyncRequestId = *response.Response.AsyncRequestId
-	return
-}
-
 func (me *MysqlService) ModifyAccountDescription(ctx context.Context, mysqlId string,
 	accountName, accountHost, accountDescription string) (asyncRequestId string, errRet error) {
 
