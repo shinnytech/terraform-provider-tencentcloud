@@ -128,10 +128,11 @@ func resourceTencentCloudMysqlAccount() *schema.Resource {
 				Description:  "Database description.",
 			},
 			"max_user_connections": {
-				Optional:    true,
-				Default:     10240,
-				Type:        schema.TypeInt,
-				Description: "The maximum number of available connections for a new account, the default value is 10240, and the maximum value that can be set is 10240.",
+				Optional:     true,
+				Default:      10240,
+				Type:         schema.TypeInt,
+				ValidateFunc: validateIntegerInRange(1, 10240), // [1, 10240]
+				Description:  "The maximum number of available connections for a new account, the default value is 10240, and the maximum value that can be set is 10240.",
 			},
 		},
 	}
@@ -335,10 +336,8 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 	}
 
 	if d.HasChange("max_user_connections") {
-		var maxUserConnections int64
-		if v, ok := d.GetOkExists("max_user_connections"); ok {
-			maxUserConnections = int64(v.(int))
-		}
+
+		maxUserConnections := int64(d.Get("max_user_connections").(int))
 		asyncRequestId, err := mysqlService.ModifyAccountMaxUserConnections(ctx, mysqlId, accountName, accountHost, maxUserConnections)
 		if err != nil {
 			return err
