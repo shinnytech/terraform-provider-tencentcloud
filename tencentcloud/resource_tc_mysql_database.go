@@ -7,20 +7,20 @@ package tencentcloud
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
 
 func resourceTencentCloudMysqlDatabase() *schema.Resource {
 	return &schema.Resource{
-		Create: resourceTencentCloudMysqlDatabaseCreate,
-		Read:   resourceTencentCloudMysqlDatabaseRead,
-		Delete: resourceTencentCloudMysqlDatabaseDelete,
+		CreateContext: resourceTencentCloudMysqlDatabaseCreate,
+		ReadContext:   resourceTencentCloudMysqlDatabaseRead,
+		DeleteContext: resourceTencentCloudMysqlDatabaseDelete,
 		Importer: &schema.ResourceImporter{
-			State: schema.ImportStatePassthrough,
+			StateContext: schema.ImportStatePassthroughContext,
 		},
 		Schema: map[string]*schema.Schema{
 			"mysql_id": {
@@ -46,11 +46,11 @@ func resourceTencentCloudMysqlDatabase() *schema.Resource {
 	}
 }
 
-func resourceTencentCloudMysqlDatabaseCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudMysqlDatabaseCreate(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_database.create")()
 
-	logId := getLogId(contextNil)
-	ctx := context.WithValue(context.TODO(), logIdKey, logId)
+	logId := getLogId(tfCtx)
+	ctx := context.WithValue(tfCtx, logIdKey, logId)
 
 	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
 
@@ -62,7 +62,7 @@ func resourceTencentCloudMysqlDatabaseCreate(d *schema.ResourceData, meta interf
 
 	requestId, err := mysqlService.CreateDatabase(ctx, mysqlId, name, characterSet)
 	if err != nil {
-		return fmt.Errorf("创建 mysql 数据库失败, 错误为: %w, 请求ID：%v", err, requestId)
+		return diag.Errorf("创建 mysql 数据库失败, 错误为: %s, 请求ID：%v", err, requestId)
 	}
 
 	resourceId := fmt.Sprintf("%s%s%s", mysqlId, FILED_SP, name)
@@ -72,12 +72,12 @@ func resourceTencentCloudMysqlDatabaseCreate(d *schema.ResourceData, meta interf
 	return nil
 }
 
-func resourceTencentCloudMysqlDatabaseRead(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudMysqlDatabaseRead(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_database.read")()
 	defer inconsistentCheck(d, meta)()
 
-	logId := getLogId(contextNil)
-	ctx := context.WithValue(context.TODO(), logIdKey, logId)
+	logId := getLogId(tfCtx)
+	ctx := context.WithValue(tfCtx, logIdKey, logId)
 
 	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
 
@@ -112,10 +112,9 @@ func resourceTencentCloudMysqlDatabaseRead(d *schema.ResourceData, meta interfac
 }
 
 // 本资源并不会直接删除database，数据库会随实例一起删除。如果保留实例则需要手动删除数据库。
-func resourceTencentCloudMysqlDatabaseDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudMysqlDatabaseDelete(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_database.delete")()
 
-	log.Printf("[INFO] Terraform 不会删除数据库 %s。\n如果您一同删除了数据库实例则无需操作。\n如果您需要保留数据库实例的情况下单独删除数据库，则您需前往腾讯云控制台手动删除数据库", d.Id())
 	d.SetId("")
-	return nil
+	return diag.Diagnostics{{Severity: diag.Warning, Summary: "本资源并不会直接删除database，数据库会随实例一起删除。如果保留实例则需要手动删除数据库。"}}
 }
