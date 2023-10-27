@@ -139,17 +139,21 @@ func resourceTencentCloudMysqlBackupPolicyV2() *schema.Resource {
 	}
 }
 
-func resourceTencentCloudMysqlBackupPolicyV2Create(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourceTencentCloudMysqlBackupPolicyV2Create(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_backup_policy_v2.create")()
-
+	logId := getLogId(tfCtx)
+	ctx := context.WithValue(tfCtx, logIdKey, logId)
 	d.SetId(d.Get("mysql_id").(string))
 
 	return resourceTencentCloudMysqlBackupPolicyV2Update(ctx, d, meta)
 }
 
-func resourceTencentCloudMysqlBackupPolicyV2Read(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourceTencentCloudMysqlBackupPolicyV2Read(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_backup_policy_v2.read")()
 	defer inconsistentCheck(d, meta)()
+
+	logId := getLogId(tfCtx)
+	ctx := context.WithValue(tfCtx, logIdKey, logId)
 
 	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
 	err := resource.RetryContext(ctx, readRetryTimeout, func() *resource.RetryError {
@@ -191,8 +195,11 @@ func resourceTencentCloudMysqlBackupPolicyV2Read(ctx context.Context, d *schema.
 	return nil
 }
 
-func resourceTencentCloudMysqlBackupPolicyV2Update(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourceTencentCloudMysqlBackupPolicyV2Update(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_backup_policy_v2.update")()
+
+	logId := getLogId(tfCtx)
+	ctx := context.WithValue(tfCtx, logIdKey, logId)
 
 	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
 
@@ -246,8 +253,11 @@ func resourceTencentCloudMysqlBackupPolicyV2Update(ctx context.Context, d *schem
 }
 
 // set all config to default
-func resourceTencentCloudMysqlBackupPolicyV2Delete(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
+func resourceTencentCloudMysqlBackupPolicyV2Delete(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("resource.tencentcloud_mysql_backup_policy.delete")()
+
+	logId := getLogId(tfCtx)
+	ctx := context.WithValue(tfCtx, logIdKey, logId)
 
 	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
 
