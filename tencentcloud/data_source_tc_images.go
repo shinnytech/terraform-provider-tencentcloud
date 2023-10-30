@@ -187,7 +187,7 @@ func dataSourceTencentCloudImages() *schema.Resource {
 func dataSourceTencentCloudImagesRead(tfCtx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	defer logElapsed("data_source.tencentcloud_images.read")()
 
-	logId := getLogId(contextNil)
+	logId := getLogId(tfCtx)
 	ctx := context.WithValue(tfCtx, logIdKey, logId)
 
 	cvmService := CvmService{
