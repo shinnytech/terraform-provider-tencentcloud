@@ -39,7 +39,7 @@ func dataSourceTencentCloudRouteTable() *schema.Resource {
 		Read:               dataSourceTencentCloudRouteTableRead,
 
 		Schema: map[string]*schema.Schema{
-			"route_table_id": {
+			"id": {
 				Type:        schema.TypeString,
 				Required:    true,
 				Description: "The Route Table ID.",
@@ -115,7 +115,7 @@ func dataSourceTencentCloudRouteTableRead(d *schema.ResourceData, meta interface
 		routeTableId string
 		name         string
 	)
-	if temp, ok := d.GetOk("route_table_id"); ok {
+	if temp, ok := d.GetOk("id"); ok {
 		tempStr := temp.(string)
 		if tempStr != "" {
 			routeTableId = tempStr
@@ -139,7 +139,7 @@ func dataSourceTencentCloudRouteTableRead(d *schema.ResourceData, meta interface
 
 	routetable := infos[0]
 	d.SetId(routetable.routeTableId)
-	_ = d.Set("route_table_id", routetable.routeTableId)
+	_ = d.Set("id", routetable.routeTableId)
 	_ = d.Set("vpc_id", routetable.vpcId)
 	_ = d.Set("name", routetable.name)
 	_ = d.Set("subnet_num", len(routetable.entryInfos))
