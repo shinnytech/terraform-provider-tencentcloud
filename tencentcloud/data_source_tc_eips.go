@@ -58,6 +58,11 @@ func dataSourceTencentCloudEips() *schema.Resource {
 				Description: "An information list of EIP. Each element contains the following attributes:",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
+						"id": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "ID of the EIP.",
+						},
 						"eip_id": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -164,6 +169,7 @@ EIP_LOOP:
 		}
 
 		mapping := map[string]interface{}{
+			"id":          eip.AddressId,
 			"eip_id":      eip.AddressId,
 			"eip_name":    eip.AddressName,
 			"eip_type":    eip.AddressType,
