@@ -148,6 +148,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
@@ -1111,6 +1112,17 @@ func resourceTencentCloudInstanceRead(d *schema.ResourceData, meta interface{}) 
 
 func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}) (err error) {
 	defer logElapsed("resource.tencentcloud_instance.update")()
+
+	cvmLock := flock.New("/run/lock/terraform-tencentcloud-cvm-" + d.Id() + ".lock")
+	if err = cvmLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		unlockErr := cvmLock.Unlock()
+		if err == nil {
+			err = unlockErr
+		}
+	}()
 
 	logId := getLogId(contextNil)
 	ctx := context.WithValue(context.TODO(), logIdKey, logId)

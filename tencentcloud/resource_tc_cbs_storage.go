@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gofrs/flock"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	cbs "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cbs/v20170312"
@@ -330,8 +331,19 @@ func resourceTencentCloudCbsStorageRead(d *schema.ResourceData, meta interface{}
 	return nil
 }
 
-func resourceTencentCloudCbsStorageUpdate(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudCbsStorageUpdate(d *schema.ResourceData, meta interface{}) (errUpdate error) {
 	defer logElapsed("resource.tencentcloud_cbs_storage.update")()
+
+	diskLock := flock.New("/run/lock/terraform-tencentcloud-disk-" + d.Id() + ".lock")
+	if err := diskLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		err := diskLock.Unlock()
+		if errUpdate == nil {
+			errUpdate = err
+		}
+	}()
 
 	logId := getLogId(contextNil)
 	ctx := context.WithValue(context.TODO(), logIdKey, logId)
