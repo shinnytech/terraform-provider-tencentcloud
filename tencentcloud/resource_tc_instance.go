@@ -542,6 +542,17 @@ func resourceTencentCloudInstance() *schema.Resource {
 				Description: "Expired time of the instance.",
 			},
 		},
+		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
+			// 腾讯云的CVM实例在修改实例类型时，需要强制创建新的实例，否则api进行关机操作失败不会主动恢复原有状态
+			oldType, newType := d.GetChange("instance_type")
+			if oldType != newType {
+				err := d.ForceNew("instance_type")
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 	}
 }
 
@@ -1583,7 +1594,14 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 	return resourceTencentCloudInstanceRead(d, meta)
 }
 
-func resourceTencentCloudInstanceDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudInstanceDelete(d *schema.ResourceData, meta interface{}) (err error) {
+	defer func() {
+		if err == nil {
+			// 腾讯云删除实例后，ip地址会保留一段时间，导致后续创建实例时，ip地址被占用，无法分配。
+			// 此处增加等待时间，确保实例被删除且ip地址被释放后再进入后续操作。
+			time.Sleep(20 * time.Second)
+		}
+	}()
 	defer logElapsed("resource.tencentcloud_instance.delete")()
 
 	logId := getLogId(contextNil)
@@ -1597,7 +1615,7 @@ func resourceTencentCloudInstanceDelete(d *schema.ResourceData, meta interface{}
 		client: meta.(*TencentCloudClient).apiV3Conn,
 	}
 
-	err := resource.Retry(writeRetryTimeout, func() *resource.RetryError {
+	err = resource.Retry(writeRetryTimeout, func() *resource.RetryError {
 		errRet := cvmService.DeleteInstance(ctx, instanceId)
 		if errRet != nil {
 			return retryError(errRet)
