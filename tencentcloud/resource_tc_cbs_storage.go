@@ -154,6 +154,16 @@ func resourceTencentCloudCbsStorage() *schema.Resource {
 				Description: "Indicates whether the CBS is mounted the CVM.",
 			},
 		},
+		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
+			oldSize, newSize := d.GetChange("storage_size")
+			if newSize.(int) < oldSize.(int) {
+				err := d.ForceNew("storage_size")
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 	}
 }
 
