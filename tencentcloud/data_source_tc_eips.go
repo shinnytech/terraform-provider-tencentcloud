@@ -68,6 +68,11 @@ func dataSourceTencentCloudEips() *schema.Resource {
 							Computed:    true,
 							Description: "ID of the EIP.",
 						},
+						"name": {
+							Type:        schema.TypeString,
+							Computed:    true,
+							Description: "Name of the EIP.",
+						},
 						"eip_name": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -107,6 +112,11 @@ func dataSourceTencentCloudEips() *schema.Resource {
 							Type:        schema.TypeMap,
 							Computed:    true,
 							Description: "Tags of the EIP.",
+						},
+						"internet_max_bandwidth_out": {
+							Type:        schema.TypeInt,
+							Computed:    true,
+							Description: "The bandwidth limit of EIP, unit is Mbps.",
 						},
 					},
 				},
@@ -169,16 +179,18 @@ EIP_LOOP:
 		}
 
 		mapping := map[string]interface{}{
-			"id":          eip.AddressId,
-			"eip_id":      eip.AddressId,
-			"eip_name":    eip.AddressName,
-			"eip_type":    eip.AddressType,
-			"status":      eip.AddressStatus,
-			"public_ip":   eip.AddressIp,
-			"instance_id": eip.InstanceId,
-			"eni_id":      eip.NetworkInterfaceId,
-			"create_time": eip.CreatedTime,
-			"tags":        respTags,
+			"id":                         eip.AddressId,
+			"eip_id":                     eip.AddressId,
+			"name":                       eip.AddressName,
+			"eip_name":                   eip.AddressName,
+			"eip_type":                   eip.AddressType,
+			"status":                     eip.AddressStatus,
+			"public_ip":                  eip.AddressIp,
+			"instance_id":                eip.InstanceId,
+			"eni_id":                     eip.NetworkInterfaceId,
+			"create_time":                eip.CreatedTime,
+			"tags":                       respTags,
+			"internet_max_bandwidth_out": eip.Bandwidth,
 		}
 
 		eipList = append(eipList, mapping)
