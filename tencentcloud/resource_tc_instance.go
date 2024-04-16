@@ -545,11 +545,23 @@ func resourceTencentCloudInstance() *schema.Resource {
 		},
 		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
 			// 腾讯云的CVM实例在修改实例类型时，需要强制创建新的实例，否则api进行关机操作失败不会主动恢复原有状态
-			oldType, newType := d.GetChange("instance_type")
-			if oldType != newType {
-				err := d.ForceNew("instance_type")
-				if err != nil {
-					return err
+			// 这些选项会触发update中ResetInstanceXXX导致强制重启，所以必须设置为强制创建新的实例
+			resetInstanceOptions := []string{
+				"instance_type",
+				"image_id",
+				"hostname",
+				"disable_security_service",
+				"disable_monitor_service",
+				"disable_automation_service",
+				"keep_image_login",
+			}
+			for _, option := range resetInstanceOptions {
+				oldValue, newValue := d.GetChange(option)
+				if oldValue != newValue {
+					err := d.ForceNew(option)
+					if err != nil {
+						return err
+					}
 				}
 			}
 			return nil
