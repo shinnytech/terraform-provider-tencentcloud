@@ -163,6 +163,30 @@ func dataSourceTencentCloudEnis() *schema.Resource {
 								},
 							},
 						},
+						"ipv4_info": {
+							Type:        schema.TypeList,
+							Computed:    true,
+							Description: "A set of intranet IPv4s.",
+							Elem: &schema.Resource{
+								Schema: map[string]*schema.Schema{
+									"ip": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "Intranet IP.",
+									},
+									"primary": {
+										Type:        schema.TypeBool,
+										Computed:    true,
+										Description: "Indicates whether the IP is primary.",
+									},
+									"description": {
+										Type:        schema.TypeString,
+										Computed:    true,
+										Description: "Description of the IP.",
+									},
+								},
+							},
+						},
 						"instance_id": {
 							Type:        schema.TypeString,
 							Computed:    true,
@@ -281,6 +305,7 @@ func dataSourceTencentCloudEnisRead(d *schema.ResourceData, m interface{}) error
 			"state":           eni.State,
 			"create_time":     eni.CreatedTime,
 			"ipv4s":           ipv4s,
+			"ipv4_info":       ipv4s,
 			"security_groups": sgs,
 			"tags":            respTags,
 		}
