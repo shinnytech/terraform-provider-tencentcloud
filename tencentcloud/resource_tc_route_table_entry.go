@@ -51,6 +51,7 @@ import (
 	"strconv"
 	"strings"
 
+	cvm "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
 	vpc "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/vpc/v20170312"
 	"github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/internal/helper"
 
@@ -94,7 +95,7 @@ func resourceTencentCloudVpcRouteEntry() *schema.Resource {
 				Type:        schema.TypeString,
 				Required:    true,
 				ForceNew:    true,
-				Description: "ID of next-hop gateway. Note: when `next_type` is EIP, GatewayId should be `0`.",
+				Description: "ID of next-hop gateway. Note: when `next_type` is EIP, `next_hub` should be `0`. when `next_type` is NORMAL_CVM, `next_hub` should be instance-id",
 			},
 			// Name enabled will lead to exist route table diff fail (null -> false cannot diff).
 			"disabled": {
@@ -157,6 +158,34 @@ func resourceTencentCloudVpcRouteEntryCreate(d *schema.ResourceData, meta interf
 		return fmt.Errorf("if next_type is %s, next_hub can only be \"0\" ", GATE_WAY_TYPE_EIP)
 	}
 
+	// we only accept instance id as next_hub for nextType is NORMAL_CVM
+	if nextType == GATE_WAY_TYPE_NORMAL_CVM {
+		cvmService := CvmService{
+			client: meta.(*TencentCloudClient).apiV3Conn,
+		}
+		var instanceSetIds []*string
+		filter := make(map[string]string)
+		// filter by instance-id to get private ip
+		filter["instance-id"] = nextHub
+
+		var instances []*cvm.Instance
+		var errRet error
+		err := resource.Retry(readRetryTimeout, func() *resource.RetryError {
+			instances, errRet = cvmService.DescribeInstanceByFilter(ctx, instanceSetIds, filter)
+			if errRet != nil {
+				return retryError(errRet, InternalError)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if len(instances) != 1 {
+			return fmt.Errorf("cannot find exact instance by id %s", nextHub)
+		}
+		nextHub = *(instances[0].PrivateIpAddresses[0]) // 此处为实例主网卡的第一个ip，当前cdk主网卡只有一个内网ip
+	}
+
 	// route cannot disable on create
 	entryId, err := service.CreateRoutes(ctx, routeTableId, destinationCidrBlock, nextType, nextHub, description, true)
 
@@ -214,7 +243,37 @@ func resourceTencentCloudVpcRouteEntryRead(d *schema.ResourceData, meta interfac
 				_ = d.Set("route_table_id", items[1])
 				_ = d.Set("destination_cidr_block", v.destinationCidr)
 				_ = d.Set("next_type", v.nextType)
-				_ = d.Set("next_hub", v.nextBub)
+
+				// convert next_hub to instance id if nextType is NORMAL_CVM
+				if v.nextType == GATE_WAY_TYPE_NORMAL_CVM {
+					cvmService := CvmService{
+						client: meta.(*TencentCloudClient).apiV3Conn,
+					}
+					var instanceSetIds []*string
+					filter := make(map[string]string)
+					// filter by vpc-id and private ip, private ip is only unique in vpc
+					filter["private-ip-address"] = v.nextBub
+					filter["vpc-id"] = info.vpcId
+
+					var instances []*cvm.Instance
+					var errRet error
+					err := resource.Retry(readRetryTimeout, func() *resource.RetryError {
+						instances, errRet = cvmService.DescribeInstanceByFilter(ctx, instanceSetIds, filter)
+						if errRet != nil {
+							return retryError(errRet, InternalError)
+						}
+						return nil
+					})
+					if err != nil {
+						return resource.NonRetryableError(err)
+					}
+					if len(instances) != 1 {
+						return resource.NonRetryableError(fmt.Errorf("cannot find exact instance by ip %s in vpc %s", v.nextBub, info.vpcId))
+					}
+					_ = d.Set("next_hub", *(instances[0].InstanceId))
+				} else {
+					_ = d.Set("next_hub", v.nextBub)
+				}
 
 				_ = d.Set("disabled", !v.enabled)
 				return nil
