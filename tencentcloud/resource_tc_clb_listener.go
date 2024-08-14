@@ -363,6 +363,23 @@ func resourceTencentCloudClbListener() *schema.Resource {
 				Description: "ID of this CLB listener.",
 			},
 		},
+		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
+			// openapi无法消除已有的健康检查参数
+			// 因此，健康检查任意参数变为空时，需要 Forcenew
+			allChangedKeys := d.GetChangedKeysPrefix("")
+			for _, key := range allChangedKeys {
+				if strings.HasPrefix(key, "health_check_") {
+					// GetChangedKeysPrefix 会返回 diff 中包括 computed 的key，需要进一步判断 HasChange
+					if _, exists := d.GetOk(key); d.HasChange(key) && !exists {
+						err := d.ForceNew(key)
+						if err != nil {
+							return err
+						}
+					}
+				}
+			}
+			return nil
+		},
 	}
 }
 
