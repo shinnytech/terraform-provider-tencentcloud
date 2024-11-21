@@ -1131,54 +1131,36 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		client: meta.(*TencentCloudClient).apiV3Conn,
 	}
 
-	// error handling for recover instance power status
-	var powerStatusRecoverErr error
-	defer func() {
-		if powerStatusRecoverErr != nil && err != nil {
-			err = fmt.Errorf("recover instance power status error: %s and update error: %s", powerStatusRecoverErr.Error(), err.Error())
-			return
-		} else if powerStatusRecoverErr != nil {
-			err = fmt.Errorf("recover instance power status error: %w", powerStatusRecoverErr)
-			return
-		}
-	}()
-
 	// recover instance power status
 	defer func() {
 		var instance *cvm.Instance
-		if instance, powerStatusRecoverErr = cvmService.DescribeInstanceById(ctx, instanceId); powerStatusRecoverErr != nil {
+		var target string
+		if err != nil {
 			return
-		} else if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED && d.Get("running_flag").(bool) {
-			powerStatusRecoverErr = cvmService.StartInstance(ctx, instanceId)
-			if powerStatusRecoverErr != nil {
-				return
-			}
-			powerStatusRecoverErr = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
-				instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
-				if errRet != nil {
-					return retryError(errRet, InternalError)
-				}
-				if instance != nil && *instance.InstanceState == CVM_STATUS_RUNNING {
-					return nil
-				}
-				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
-			})
-		} else if instance != nil && *instance.InstanceState == CVM_STATUS_RUNNING && !d.Get("running_flag").(bool) {
-			powerStatusRecoverErr = cvmService.StopInstance(ctx, instanceId, d.Get("stopped_mode").(string)) // default is "KEEP_CHARGING"
-			if powerStatusRecoverErr != nil {
-				return
-			}
-			powerStatusRecoverErr = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
-				instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
-				if errRet != nil {
-					return retryError(errRet, InternalError)
-				}
-				if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED {
-					return nil
-				}
-				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
-			})
+		} else if instance, err = cvmService.DescribeInstanceById(ctx, instanceId); err != nil {
+			return
+		} else if *instance.InstanceState == CVM_STATUS_STOPPED && d.Get("running_flag").(bool) {
+			err = cvmService.StartInstance(ctx, instanceId)
+			target = CVM_STATUS_RUNNING
+		} else if *instance.InstanceState == CVM_STATUS_RUNNING && !d.Get("running_flag").(bool) {
+			err = cvmService.StopInstance(ctx, instanceId, d.Get("stopped_mode").(string)) // default is "KEEP_CHARGING"
+			target = CVM_STATUS_STOPPED
+		} else {
+			return
 		}
+
+		if err != nil {
+			return
+		}
+		err = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
+			instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+			if errRet != nil {
+				return retryError(errRet, InternalError)
+			} else if *instance.InstanceState != target {
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			}
+			return nil
+		})
 	}()
 
 	d.Partial(true)
@@ -1336,11 +1318,10 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 			instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
 			if errRet != nil {
 				return retryError(errRet, InternalError)
+			} else if *instance.InstanceState != CVM_STATUS_STOPPED {
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
 			}
-			if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED {
-				return nil
-			}
-			return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			return nil
 		})
 		if err != nil {
 			return
