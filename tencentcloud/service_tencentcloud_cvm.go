@@ -295,11 +295,10 @@ func (me *CvmService) ModifyInstanceType(ctx context.Context, instanceId, instan
 		instance, errRet := me.DescribeInstanceById(ctx, instanceId)
 		if errRet != nil {
 			return retryError(errRet, InternalError)
+		} else if *instance.InstanceState != CVM_STATUS_STOPPED {
+			return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
 		}
-		if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED {
-			return nil
-		}
-		return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+		return nil
 	})
 	if err != nil {
 		return err
