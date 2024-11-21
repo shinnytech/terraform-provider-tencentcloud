@@ -543,29 +543,6 @@ func resourceTencentCloudInstance() *schema.Resource {
 				Description: "Expired time of the instance.",
 			},
 		},
-		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
-			// 腾讯云的CVM实例在修改实例类型时，需要强制创建新的实例，否则api进行关机操作失败不会主动恢复原有状态
-			// 这些选项会触发update中ResetInstanceXXX导致强制重启，所以必须设置为强制创建新的实例
-			resetInstanceOptions := []string{
-				"instance_type",
-				"image_id",
-				"hostname",
-				"disable_security_service",
-				"disable_monitor_service",
-				"disable_automation_service",
-				"keep_image_login",
-			}
-			for _, option := range resetInstanceOptions {
-				oldValue, newValue := d.GetChange(option)
-				if oldValue != newValue {
-					err := d.ForceNew(option)
-					if err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		},
 	}
 }
 
@@ -1154,6 +1131,56 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		client: meta.(*TencentCloudClient).apiV3Conn,
 	}
 
+	// error handling for recover instance power status
+	var powerStatusRecoverErr error
+	defer func() {
+		if powerStatusRecoverErr != nil && err != nil {
+			err = fmt.Errorf("recover instance power status error: %s and update error: %s", powerStatusRecoverErr.Error(), err.Error())
+			return
+		} else if powerStatusRecoverErr != nil {
+			err = fmt.Errorf("recover instance power status error: %w", powerStatusRecoverErr)
+			return
+		}
+	}()
+
+	// recover instance power status
+	defer func() {
+		var instance *cvm.Instance
+		if instance, powerStatusRecoverErr = cvmService.DescribeInstanceById(ctx, instanceId); powerStatusRecoverErr != nil {
+			return
+		} else if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED && d.Get("running_flag").(bool) {
+			powerStatusRecoverErr = cvmService.StartInstance(ctx, instanceId)
+			if powerStatusRecoverErr != nil {
+				return
+			}
+			powerStatusRecoverErr = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
+				instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+				if errRet != nil {
+					return retryError(errRet, InternalError)
+				}
+				if instance != nil && *instance.InstanceState == CVM_STATUS_RUNNING {
+					return nil
+				}
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			})
+		} else if instance != nil && *instance.InstanceState == CVM_STATUS_RUNNING && !d.Get("running_flag").(bool) {
+			powerStatusRecoverErr = cvmService.StopInstance(ctx, instanceId, d.Get("stopped_mode").(string)) // default is "KEEP_CHARGING"
+			if powerStatusRecoverErr != nil {
+				return
+			}
+			powerStatusRecoverErr = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
+				instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+				if errRet != nil {
+					return retryError(errRet, InternalError)
+				}
+				if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED {
+					return nil
+				}
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			})
+		}
+	}()
+
 	d.Partial(true)
 
 	// Get the latest instance info from actual resource.
@@ -1300,6 +1327,24 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		d.HasChange("disable_monitor_service") ||
 		d.HasChange("disable_automation_service") ||
 		d.HasChange("keep_image_login") {
+
+		err = cvmService.StopInstance(ctx, instanceId, "KEEP_CHARGING")
+		if err != nil {
+			return
+		}
+		err = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
+			instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+			if errRet != nil {
+				return retryError(errRet, InternalError)
+			}
+			if instance != nil && *instance.InstanceState == CVM_STATUS_STOPPED {
+				return nil
+			}
+			return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+		})
+		if err != nil {
+			return
+		}
 
 		request := cvm.NewResetInstanceRequest()
 		request.InstanceId = helper.String(d.Id())
