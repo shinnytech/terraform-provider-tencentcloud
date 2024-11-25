@@ -143,6 +143,7 @@ package tencentcloud
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -151,12 +152,13 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
-	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	sdkErrors "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/errors"
 	cvm "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
 	"github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/internal/helper"
 	"github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/ratelimit"
 )
+
+var cvmResourceInsufficientError = fmt.Errorf("insufficient specific cvm type resource")
 
 func resourceTencentCloudInstance() *schema.Resource {
 	return &schema.Resource{
@@ -194,12 +196,21 @@ func resourceTencentCloudInstance() *schema.Resource {
 				ValidateFunc: validateStringLengthInRange(2, 128),
 				Description:  "The name of the instance. The max length of instance_name is 60, and default value is `Terraform-CVM-Instance`.",
 			},
+			"instance_type_candidates": {
+				Type:          schema.TypeList,
+				Elem:          &schema.Schema{Type: schema.TypeString},
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"instance_type"},
+				Description:   "The type of the instance.",
+			},
 			"instance_type": {
-				Type:         schema.TypeString,
-				Optional:     true,
-				Computed:     true,
-				ValidateFunc: validateInstanceType,
-				Description:  "The type of the instance.",
+				Type:          schema.TypeString,
+				Optional:      true,
+				Computed:      true,
+				ConflictsWith: []string{"instance_type_candidates"},
+				ValidateFunc:  validateInstanceType,
+				Description:   "The type of the instance.",
 			},
 			"hostname": {
 				Type:        schema.TypeString,
@@ -543,6 +554,22 @@ func resourceTencentCloudInstance() *schema.Resource {
 				Description: "Expired time of the instance.",
 			},
 		},
+		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
+			// delete 和 read 时 不调用
+			_, newCandidates := d.GetChange("instance_type_candidates")
+			oldType, _ := d.GetChange("instance_type")
+			// update 时 判断 instance_type_candidates 是否包含 instance_type，如果不包含则forceNew
+			for _, candidate := range newCandidates.([]interface{}) {
+				if candidate == oldType {
+					return nil
+				}
+			}
+			// 如果 instance_type_candidates 不包含 instance_type，则设置 forceNew
+			_ = d.ForceNew("instance_type_candidates")
+			// 上游版本兼容，确保官方写法中只有一个 instance_type 字段且发生变化时可以触发 forceNew
+			_ = d.ForceNew("instance_type")
+			return nil
+		},
 	}
 }
 
@@ -554,288 +581,326 @@ func resourceTencentCloudInstanceCreate(d *schema.ResourceData, meta interface{}
 		client: meta.(*TencentCloudClient).apiV3Conn,
 	}
 
-	request := cvm.NewRunInstancesRequest()
-	request.ImageId = helper.String(d.Get("image_id").(string))
-	request.Placement = &cvm.Placement{
-		Zone: helper.String(d.Get("availability_zone").(string)),
-	}
-	if v, ok := d.GetOk("project_id"); ok {
-		projectId := int64(v.(int))
-		request.Placement.ProjectId = &projectId
-	}
-	if v, ok := d.GetOk("instance_name"); ok {
-		request.InstanceName = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("instance_count"); ok {
-		request.InstanceCount = helper.Int64(int64(v.(int)))
+	instanceTypeCandidates := make([]string, 0)
+	if v, ok := d.GetOk("instance_type_candidates"); ok {
+		for _, candidate := range v.([]interface{}) {
+			instanceTypeCandidates = append(instanceTypeCandidates, candidate.(string))
+		}
 	}
 	if v, ok := d.GetOk("instance_type"); ok {
-		request.InstanceType = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("hostname"); ok {
-		request.HostName = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("cam_role_name"); ok {
-		request.CamRoleName = helper.String(v.(string))
+		instanceTypeCandidates = append(instanceTypeCandidates, v.(string))
 	}
 
-	if v, ok := d.GetOk("instance_charge_type"); ok {
-		instanceChargeType := v.(string)
-		request.InstanceChargeType = &instanceChargeType
-		if instanceChargeType == CVM_CHARGE_TYPE_PREPAID {
-			request.InstanceChargePrepaid = &cvm.InstanceChargePrepaid{}
-			if period, ok := d.GetOk("instance_charge_type_prepaid_period"); ok {
-				periodInt64 := int64(period.(int))
-				request.InstanceChargePrepaid.Period = &periodInt64
-			}
-			if renewFlag, ok := d.GetOk("instance_charge_type_prepaid_renew_flag"); ok {
-				request.InstanceChargePrepaid.RenewFlag = helper.String(renewFlag.(string))
-			}
-		}
-		if instanceChargeType == CVM_CHARGE_TYPE_SPOTPAID {
-			spotInstanceType, sitOk := d.GetOk("spot_instance_type")
-			spotMaxPrice, smpOk := d.GetOk("spot_max_price")
-			if sitOk || smpOk {
-				request.InstanceMarketOptions = &cvm.InstanceMarketOptionsRequest{}
-				request.InstanceMarketOptions.MarketType = helper.String(CVM_MARKET_TYPE_SPOT)
-				request.InstanceMarketOptions.SpotOptions = &cvm.SpotMarketOptions{}
-			}
-			if sitOk {
-				request.InstanceMarketOptions.SpotOptions.SpotInstanceType = helper.String(strings.ToLower(spotInstanceType.(string)))
-			}
-			if smpOk {
-				request.InstanceMarketOptions.SpotOptions.MaxPrice = helper.String(spotMaxPrice.(string))
-			}
-		}
-		if instanceChargeType == CVM_CHARGE_TYPE_CDHPAID {
-			if v, ok := d.GetOk("cdh_instance_type"); ok {
-				request.InstanceType = helper.String(v.(string))
-			} else {
-				return fmt.Errorf("cdh_instance_type can not be empty when instance_charge_type is %s", instanceChargeType)
-			}
-			if v, ok := d.GetOk("cdh_host_id"); ok {
-				request.Placement.HostIds = append(request.Placement.HostIds, helper.String(v.(string)))
-			} else {
-				return fmt.Errorf("cdh_host_id can not be empty when instance_charge_type is %s", instanceChargeType)
-			}
-		}
-	}
-	if v, ok := d.GetOk("placement_group_id"); ok {
-		request.DisasterRecoverGroupIds = []*string{helper.String(v.(string))}
-	}
-
-	// network
-	request.InternetAccessible = &cvm.InternetAccessible{}
-	if v, ok := d.GetOk("internet_charge_type"); ok {
-		request.InternetAccessible.InternetChargeType = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("internet_max_bandwidth_out"); ok {
-		maxBandwidthOut := int64(v.(int))
-		request.InternetAccessible.InternetMaxBandwidthOut = &maxBandwidthOut
-	}
-	if v, ok := d.GetOk("bandwidth_package_id"); ok {
-		request.InternetAccessible.BandwidthPackageId = helper.String(v.(string))
-	}
-	if v, ok := d.GetOkExists("allocate_public_ip"); ok {
-		allocatePublicIp := v.(bool)
-		request.InternetAccessible.PublicIpAssigned = &allocatePublicIp
-	}
-
-	// vpc
-	if v, ok := d.GetOk("vpc_id"); ok {
-		request.VirtualPrivateCloud = &cvm.VirtualPrivateCloud{}
-		request.VirtualPrivateCloud.VpcId = helper.String(v.(string))
-
-		if v, ok = d.GetOk("subnet_id"); ok {
-			request.VirtualPrivateCloud.SubnetId = helper.String(v.(string))
-		}
-
-		if v, ok = d.GetOk("private_ip"); ok {
-			request.VirtualPrivateCloud.PrivateIpAddresses = []*string{helper.String(v.(string))}
-		}
-	}
-
-	if v, ok := d.GetOk("security_groups"); ok {
-		securityGroups := v.(*schema.Set).List()
-		request.SecurityGroupIds = make([]*string, 0, len(securityGroups))
-		for _, securityGroup := range securityGroups {
-			request.SecurityGroupIds = append(request.SecurityGroupIds, helper.String(securityGroup.(string)))
-		}
-	}
-
-	if v, ok := d.GetOk("orderly_security_groups"); ok {
-		securityGroups := v.([]interface{})
-		request.SecurityGroupIds = make([]*string, 0, len(securityGroups))
-		for _, securityGroup := range securityGroups {
-			request.SecurityGroupIds = append(request.SecurityGroupIds, helper.String(securityGroup.(string)))
-		}
-	}
-
-	// storage
-	request.SystemDisk = &cvm.SystemDisk{}
-	if v, ok := d.GetOk("system_disk_type"); ok {
-		request.SystemDisk.DiskType = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("system_disk_size"); ok {
-		diskSize := int64(v.(int))
-		request.SystemDisk.DiskSize = &diskSize
-	}
-	if v, ok := d.GetOk("system_disk_id"); ok {
-		request.SystemDisk.DiskId = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("data_disks"); ok {
-		dataDisks := v.([]interface{})
-		request.DataDisks = make([]*cvm.DataDisk, 0, len(dataDisks))
-		for _, d := range dataDisks {
-			value := d.(map[string]interface{})
-			diskType := value["data_disk_type"].(string)
-			diskSize := int64(value["data_disk_size"].(int))
-			throughputPerformance := int64(value["throughput_performance"].(int))
-			dataDisk := cvm.DataDisk{
-				DiskType:              &diskType,
-				DiskSize:              &diskSize,
-				ThroughputPerformance: &throughputPerformance,
-			}
-			if v, ok := value["data_disk_snapshot_id"]; ok && v != nil {
-				snapshotId := v.(string)
-				if snapshotId != "" {
-					dataDisk.SnapshotId = helper.String(snapshotId)
-				}
-			}
-			if value["data_disk_id"] != "" {
-				dataDisk.DiskId = helper.String(value["data_disk_id"].(string))
-			}
-			if deleteWithInstance, ok := value["delete_with_instance"]; ok {
-				deleteWithInstanceBool := deleteWithInstance.(bool)
-				dataDisk.DeleteWithInstance = &deleteWithInstanceBool
-			}
-
-			if encrypt, ok := value["encrypt"]; ok {
-				encryptBool := encrypt.(bool)
-				dataDisk.Encrypt = &encryptBool
-			}
-			request.DataDisks = append(request.DataDisks, &dataDisk)
-		}
-	}
-
-	// enhanced service
-	request.EnhancedService = &cvm.EnhancedService{}
-	if v, ok := d.GetOkExists("disable_security_service"); ok {
-		securityService := !(v.(bool))
-		request.EnhancedService.SecurityService = &cvm.RunSecurityServiceEnabled{
-			Enabled: &securityService,
-		}
-	}
-	if v, ok := d.GetOkExists("disable_monitor_service"); ok {
-		monitorService := !(v.(bool))
-		request.EnhancedService.MonitorService = &cvm.RunMonitorServiceEnabled{
-			Enabled: &monitorService,
-		}
-	}
-	if v, ok := d.GetOkExists("disable_automation_service"); ok {
-		automationService := !(v.(bool))
-		request.EnhancedService.AutomationService = &cvm.RunAutomationServiceEnabled{
-			Enabled: &automationService,
-		}
-	}
-
-	// login
-	request.LoginSettings = &cvm.LoginSettings{}
-	keyIds := d.Get("key_ids").(*schema.Set).List()
-	if len(keyIds) > 0 {
-		request.LoginSettings.KeyIds = helper.InterfacesStringsPoint(keyIds)
-	} else if v, ok := d.GetOk("key_name"); ok {
-		request.LoginSettings.KeyIds = []*string{helper.String(v.(string))}
-	}
-	if v, ok := d.GetOk("password"); ok {
-		request.LoginSettings.Password = helper.String(v.(string))
-	}
-	v := d.Get("keep_image_login").(bool)
-	if v {
-		request.LoginSettings.KeepImageLogin = helper.String(CVM_IMAGE_LOGIN)
-	} else {
-		request.LoginSettings.KeepImageLogin = helper.String(CVM_IMAGE_LOGIN_NOT)
-	}
-
-	if v, ok := d.GetOk("user_data"); ok {
-		request.UserData = helper.String(v.(string))
-	}
-	if v, ok := d.GetOk("user_data_raw"); ok {
-		userData := base64.StdEncoding.EncodeToString([]byte(v.(string)))
-		request.UserData = &userData
-	}
-
-	if v, ok := d.GetOkExists("disable_api_termination"); ok {
-		request.DisableApiTermination = helper.Bool(v.(bool))
-	}
-
-	if v := helper.GetTags(d, "tags"); len(v) > 0 {
-		tags := make([]*cvm.Tag, 0)
-		for tagKey, tagValue := range v {
-			tag := cvm.Tag{
-				Key:   helper.String(tagKey),
-				Value: helper.String(tagValue),
-			}
-			tags = append(tags, &tag)
-		}
-		tagSpecification := cvm.TagSpecification{
-			ResourceType: helper.String("instance"),
-			Tags:         tags,
-		}
-		request.TagSpecification = append(request.TagSpecification, &tagSpecification)
-	}
-
+	var err error
 	instanceId := ""
+	for _, instanceType := range instanceTypeCandidates {
+		request := cvm.NewRunInstancesRequest()
+		request.InstanceType = helper.String(instanceType)
+		request.ImageId = helper.String(d.Get("image_id").(string))
+		request.Placement = &cvm.Placement{
+			Zone: helper.String(d.Get("availability_zone").(string)),
+		}
+		if v, ok := d.GetOk("project_id"); ok {
+			projectId := int64(v.(int))
+			request.Placement.ProjectId = &projectId
+		}
+		if v, ok := d.GetOk("instance_name"); ok {
+			request.InstanceName = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("instance_count"); ok {
+			request.InstanceCount = helper.Int64(int64(v.(int)))
+		}
+		if v, ok := d.GetOk("hostname"); ok {
+			request.HostName = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("cam_role_name"); ok {
+			request.CamRoleName = helper.String(v.(string))
+		}
 
-	err := resource.Retry(writeRetryTimeout, func() *resource.RetryError {
-		ratelimit.Check("create")
-		response, err := meta.(*TencentCloudClient).apiV3Conn.UseCvmClient().RunInstances(request)
-		if err != nil {
-			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
-				logId, request.GetAction(), request.ToJsonString(), err.Error())
-			e, ok := err.(*sdkErrors.TencentCloudSDKError)
-			if ok && IsContains(CVM_RETRYABLE_ERROR, e.Code) {
-				return resource.RetryableError(fmt.Errorf("cvm create error: %s, retrying", e.Error()))
-			} else if ok && IsContains("ResourceInsufficient.SpecifiedInstanceType", e.Code) {
-				hintReq := cvm.NewDescribeZoneInstanceConfigInfosRequest()
-				hintReq.Filters = []*cvm.Filter{
-					{
-						Name:   common.StringPtr("instance-type"),
-						Values: common.StringPtrs([]string{*helper.String(d.Get("instance_type").(string))}),
-					},
-					{
-						Name:   common.StringPtr("instance-charge-type"),
-						Values: common.StringPtrs([]string{*helper.String(d.Get("instance_charge_type").(string))}),
-					},
+		if v, ok := d.GetOk("instance_charge_type"); ok {
+			instanceChargeType := v.(string)
+			request.InstanceChargeType = &instanceChargeType
+			if instanceChargeType == CVM_CHARGE_TYPE_PREPAID {
+				request.InstanceChargePrepaid = &cvm.InstanceChargePrepaid{}
+				if period, ok := d.GetOk("instance_charge_type_prepaid_period"); ok {
+					periodInt64 := int64(period.(int))
+					request.InstanceChargePrepaid.Period = &periodInt64
 				}
-				response, err := cvmService.client.UseCvmClient().DescribeZoneInstanceConfigInfos(hintReq)
-				if err != nil {
-					return resource.NonRetryableError(err)
+				if renewFlag, ok := d.GetOk("instance_charge_type_prepaid_renew_flag"); ok {
+					request.InstanceChargePrepaid.RenewFlag = helper.String(renewFlag.(string))
 				}
-				sellZones := make([]string, 0)
-				for _, instance := range response.Response.InstanceTypeQuotaSet {
-					if *instance.Status == "SELL" {
-						sellZones = append(sellZones, *instance.Zone)
+			}
+			if instanceChargeType == CVM_CHARGE_TYPE_SPOTPAID {
+				spotInstanceType, sitOk := d.GetOk("spot_instance_type")
+				spotMaxPrice, smpOk := d.GetOk("spot_max_price")
+				if sitOk || smpOk {
+					request.InstanceMarketOptions = &cvm.InstanceMarketOptionsRequest{}
+					request.InstanceMarketOptions.MarketType = helper.String(CVM_MARKET_TYPE_SPOT)
+					request.InstanceMarketOptions.SpotOptions = &cvm.SpotMarketOptions{}
+				}
+				if sitOk {
+					request.InstanceMarketOptions.SpotOptions.SpotInstanceType = helper.String(strings.ToLower(spotInstanceType.(string)))
+				}
+				if smpOk {
+					request.InstanceMarketOptions.SpotOptions.MaxPrice = helper.String(spotMaxPrice.(string))
+				}
+			}
+			if instanceChargeType == CVM_CHARGE_TYPE_CDHPAID {
+				if v, ok := d.GetOk("cdh_instance_type"); ok {
+					request.InstanceType = helper.String(v.(string))
+				} else {
+					return fmt.Errorf("cdh_instance_type can not be empty when instance_charge_type is %s", instanceChargeType)
+				}
+				if v, ok := d.GetOk("cdh_host_id"); ok {
+					request.Placement.HostIds = append(request.Placement.HostIds, helper.String(v.(string)))
+				} else {
+					return fmt.Errorf("cdh_host_id can not be empty when instance_charge_type is %s", instanceChargeType)
+				}
+			}
+		}
+		if v, ok := d.GetOk("placement_group_id"); ok {
+			request.DisasterRecoverGroupIds = []*string{helper.String(v.(string))}
+		}
+
+		// network
+		request.InternetAccessible = &cvm.InternetAccessible{}
+		if v, ok := d.GetOk("internet_charge_type"); ok {
+			request.InternetAccessible.InternetChargeType = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("internet_max_bandwidth_out"); ok {
+			maxBandwidthOut := int64(v.(int))
+			request.InternetAccessible.InternetMaxBandwidthOut = &maxBandwidthOut
+		}
+		if v, ok := d.GetOk("bandwidth_package_id"); ok {
+			request.InternetAccessible.BandwidthPackageId = helper.String(v.(string))
+		}
+		if v, ok := d.GetOkExists("allocate_public_ip"); ok {
+			allocatePublicIp := v.(bool)
+			request.InternetAccessible.PublicIpAssigned = &allocatePublicIp
+		}
+
+		// vpc
+		if v, ok := d.GetOk("vpc_id"); ok {
+			request.VirtualPrivateCloud = &cvm.VirtualPrivateCloud{}
+			request.VirtualPrivateCloud.VpcId = helper.String(v.(string))
+
+			if v, ok = d.GetOk("subnet_id"); ok {
+				request.VirtualPrivateCloud.SubnetId = helper.String(v.(string))
+			}
+
+			if v, ok = d.GetOk("private_ip"); ok {
+				request.VirtualPrivateCloud.PrivateIpAddresses = []*string{helper.String(v.(string))}
+			}
+		}
+
+		if v, ok := d.GetOk("security_groups"); ok {
+			securityGroups := v.(*schema.Set).List()
+			request.SecurityGroupIds = make([]*string, 0, len(securityGroups))
+			for _, securityGroup := range securityGroups {
+				request.SecurityGroupIds = append(request.SecurityGroupIds, helper.String(securityGroup.(string)))
+			}
+		}
+
+		if v, ok := d.GetOk("orderly_security_groups"); ok {
+			securityGroups := v.([]interface{})
+			request.SecurityGroupIds = make([]*string, 0, len(securityGroups))
+			for _, securityGroup := range securityGroups {
+				request.SecurityGroupIds = append(request.SecurityGroupIds, helper.String(securityGroup.(string)))
+			}
+		}
+
+		// storage
+		request.SystemDisk = &cvm.SystemDisk{}
+		if v, ok := d.GetOk("system_disk_type"); ok {
+			request.SystemDisk.DiskType = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("system_disk_size"); ok {
+			diskSize := int64(v.(int))
+			request.SystemDisk.DiskSize = &diskSize
+		}
+		if v, ok := d.GetOk("system_disk_id"); ok {
+			request.SystemDisk.DiskId = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("data_disks"); ok {
+			dataDisks := v.([]interface{})
+			request.DataDisks = make([]*cvm.DataDisk, 0, len(dataDisks))
+			for _, d := range dataDisks {
+				value := d.(map[string]interface{})
+				diskType := value["data_disk_type"].(string)
+				diskSize := int64(value["data_disk_size"].(int))
+				throughputPerformance := int64(value["throughput_performance"].(int))
+				dataDisk := cvm.DataDisk{
+					DiskType:              &diskType,
+					DiskSize:              &diskSize,
+					ThroughputPerformance: &throughputPerformance,
+				}
+				if v, ok := value["data_disk_snapshot_id"]; ok && v != nil {
+					snapshotId := v.(string)
+					if snapshotId != "" {
+						dataDisk.SnapshotId = helper.String(snapshotId)
 					}
 				}
-				return resource.NonRetryableError(fmt.Errorf("实例类型[%s]在可用区[%s]无法创建实例，可以尝试在可用区[%s]创建实例", *helper.String(d.Get("instance_type").(string)), *helper.String(d.Get("availability_zone").(string)), strings.Join(sellZones, ",")))
-			}
-			return resource.NonRetryableError(err)
-		}
-		log.Printf("[DEBUG]%s api[%s] success, request body [%s], response body [%s]\n",
-			logId, request.GetAction(), request.ToJsonString(), response.ToJsonString())
-		if len(response.Response.InstanceIdSet) < 1 {
-			err = fmt.Errorf("instance id is nil")
-			return resource.NonRetryableError(err)
-		}
-		instanceId = *response.Response.InstanceIdSet[0]
+				if value["data_disk_id"] != "" {
+					dataDisk.DiskId = helper.String(value["data_disk_id"].(string))
+				}
+				if deleteWithInstance, ok := value["delete_with_instance"]; ok {
+					deleteWithInstanceBool := deleteWithInstance.(bool)
+					dataDisk.DeleteWithInstance = &deleteWithInstanceBool
+				}
 
-		return nil
-	})
-	if err != nil {
-		return err
+				if encrypt, ok := value["encrypt"]; ok {
+					encryptBool := encrypt.(bool)
+					dataDisk.Encrypt = &encryptBool
+				}
+				request.DataDisks = append(request.DataDisks, &dataDisk)
+			}
+		}
+
+		// enhanced service
+		request.EnhancedService = &cvm.EnhancedService{}
+		if v, ok := d.GetOkExists("disable_security_service"); ok {
+			securityService := !(v.(bool))
+			request.EnhancedService.SecurityService = &cvm.RunSecurityServiceEnabled{
+				Enabled: &securityService,
+			}
+		}
+		if v, ok := d.GetOkExists("disable_monitor_service"); ok {
+			monitorService := !(v.(bool))
+			request.EnhancedService.MonitorService = &cvm.RunMonitorServiceEnabled{
+				Enabled: &monitorService,
+			}
+		}
+		if v, ok := d.GetOkExists("disable_automation_service"); ok {
+			automationService := !(v.(bool))
+			request.EnhancedService.AutomationService = &cvm.RunAutomationServiceEnabled{
+				Enabled: &automationService,
+			}
+		}
+
+		// login
+		request.LoginSettings = &cvm.LoginSettings{}
+		keyIds := d.Get("key_ids").(*schema.Set).List()
+		if len(keyIds) > 0 {
+			request.LoginSettings.KeyIds = helper.InterfacesStringsPoint(keyIds)
+		} else if v, ok := d.GetOk("key_name"); ok {
+			request.LoginSettings.KeyIds = []*string{helper.String(v.(string))}
+		}
+		if v, ok := d.GetOk("password"); ok {
+			request.LoginSettings.Password = helper.String(v.(string))
+		}
+		v := d.Get("keep_image_login").(bool)
+		if v {
+			request.LoginSettings.KeepImageLogin = helper.String(CVM_IMAGE_LOGIN)
+		} else {
+			request.LoginSettings.KeepImageLogin = helper.String(CVM_IMAGE_LOGIN_NOT)
+		}
+
+		if v, ok := d.GetOk("user_data"); ok {
+			request.UserData = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("user_data_raw"); ok {
+			userData := base64.StdEncoding.EncodeToString([]byte(v.(string)))
+			request.UserData = &userData
+		}
+
+		if v, ok := d.GetOkExists("disable_api_termination"); ok {
+			request.DisableApiTermination = helper.Bool(v.(bool))
+		}
+
+		if v := helper.GetTags(d, "tags"); len(v) > 0 {
+			tags := make([]*cvm.Tag, 0)
+			for tagKey, tagValue := range v {
+				tag := cvm.Tag{
+					Key:   helper.String(tagKey),
+					Value: helper.String(tagValue),
+				}
+				tags = append(tags, &tag)
+			}
+			tagSpecification := cvm.TagSpecification{
+				ResourceType: helper.String("instance"),
+				Tags:         tags,
+			}
+			request.TagSpecification = append(request.TagSpecification, &tagSpecification)
+		}
+
+		// 发起开机指令
+		err = resource.Retry(writeRetryTimeout, func() *resource.RetryError {
+			ratelimit.Check("create")
+			response, runErr := meta.(*TencentCloudClient).apiV3Conn.UseCvmClient().RunInstances(request)
+			if runErr != nil {
+				log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+					logId, request.GetAction(), request.ToJsonString(), runErr.Error())
+				e, ok := runErr.(*sdkErrors.TencentCloudSDKError)
+				if ok && IsContains(CVM_RETRYABLE_ERROR, e.Code) {
+					return resource.RetryableError(fmt.Errorf("cvm create error: %s, retrying", e.Error()))
+				} else if ok && IsContains([]string{
+					"ResourceInsufficient.AvailabilityZoneSoldOut",
+					"ResourceInsufficient.SpecifiedInstanceType",
+					"ResourceUnavailable.InstanceType",
+					"ResourcesSoldOut.SpecifiedInstanceType",
+				}, e.Code) {
+					// 开机失败，继续尝试下一个实例类型
+					return resource.NonRetryableError(cvmResourceInsufficientError)
+				}
+				// 未知错误，直接报错
+				return resource.NonRetryableError(runErr)
+			}
+			log.Printf("[DEBUG]%s api[%s] success, request body [%s], response body [%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), response.ToJsonString())
+			if len(response.Response.InstanceIdSet) < 1 {
+				runErr = fmt.Errorf("instance id is nil")
+				return resource.NonRetryableError(runErr)
+			}
+			instanceId = *response.Response.InstanceIdSet[0]
+			return nil
+		})
+		if errors.Is(err, cvmResourceInsufficientError) {
+			// 资源不足，继续尝试下一个实例类型
+			continue
+		} else if err != nil {
+			// 其他错误，直接报错
+			return err
+		}
+
+		// 设置实例ID, 避免后续api超时导致实例无人管理
+		d.SetId(instanceId)
+
+		// wait for instance running
+		err = resource.Retry(5*readRetryTimeout, func() *resource.RetryError {
+			// 根据腾讯云客服的回答，创建实例请求并不会锁定库存，发起后依旧可能出现库存不足的情况
+			// 此时只会出现 CVM_STATUS_RUNNING 和 CVM_STATUS_LAUNCH_FAILED 两种状态
+			if instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId); errRet != nil {
+				return retryError(errRet, InternalError)
+			} else if instance == nil {
+				// 实例开机成功后不存在，直接报错
+				return resource.NonRetryableError(fmt.Errorf("cvm instance status is missing, id: %s", instanceId))
+			} else if *instance.InstanceState == CVM_STATUS_LAUNCH_FAILED {
+				// 库存不足，继续尝试下一个实例类型，根据客服回答，此时无需担心实例状态
+				return resource.NonRetryableError(cvmResourceInsufficientError)
+			} else if *instance.InstanceState == CVM_STATUS_PENDING {
+				// 创建中
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			} else if *instance.InstanceState != CVM_STATUS_RUNNING {
+				// 其他状态，直接报错
+				return resource.NonRetryableError(fmt.Errorf("cvm instance status is %s, abort", *instance.InstanceState))
+			}
+			return nil
+		})
+		if errors.Is(err, cvmResourceInsufficientError) {
+			// 资源不足，继续尝试下一个实例类型
+			continue
+		} else if err != nil {
+			// 其他错误，直接报错
+			return err
+		}
+		// 记录成功创建的实例类型
+		_ = d.Set("instance_type", instanceType)
+		break
 	}
-	d.SetId(instanceId)
+	// 如果所有实例类型都资源不足，直接报错
+	if errors.Is(err, cvmResourceInsufficientError) {
+		return fmt.Errorf("cvm 资源不足导致开机失败，已尝试机型列表：%s", strings.Join(instanceTypeCandidates, ","))
+	}
 
 	//get system disk ID and data disk ID
 	var systemDiskId string
