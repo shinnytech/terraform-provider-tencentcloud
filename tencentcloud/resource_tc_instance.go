@@ -827,21 +827,19 @@ func resourceTencentCloudInstanceCreate(d *schema.ResourceData, meta interface{}
 		err = resource.Retry(writeRetryTimeout, func() *resource.RetryError {
 			ratelimit.Check("create")
 			response, runErr := meta.(*TencentCloudClient).apiV3Conn.UseCvmClient().RunInstances(request)
-			if runErr != nil {
+			if isExpectError(runErr, CVM_RETRYABLE_ERROR) {
+				return resource.RetryableError(fmt.Errorf("cvm create error: %s, retrying", runErr.Error()))
+			} else if isExpectError(runErr, []string{
+				"ResourceInsufficient.AvailabilityZoneSoldOut",
+				"ResourceInsufficient.SpecifiedInstanceType",
+				"ResourceUnavailable.InstanceType",
+				"ResourcesSoldOut.SpecifiedInstanceType",
+			}) {
+				// 开机失败，继续尝试下一个实例类型
+				return resource.NonRetryableError(cvmResourceInsufficientError)
+			} else if runErr != nil {
 				log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
 					logId, request.GetAction(), request.ToJsonString(), runErr.Error())
-				e, ok := runErr.(*sdkErrors.TencentCloudSDKError)
-				if ok && IsContains(CVM_RETRYABLE_ERROR, e.Code) {
-					return resource.RetryableError(fmt.Errorf("cvm create error: %s, retrying", e.Error()))
-				} else if ok && IsContains([]string{
-					"ResourceInsufficient.AvailabilityZoneSoldOut",
-					"ResourceInsufficient.SpecifiedInstanceType",
-					"ResourceUnavailable.InstanceType",
-					"ResourcesSoldOut.SpecifiedInstanceType",
-				}, e.Code) {
-					// 开机失败，继续尝试下一个实例类型
-					return resource.NonRetryableError(cvmResourceInsufficientError)
-				}
 				// 未知错误，直接报错
 				return resource.NonRetryableError(runErr)
 			}
@@ -1376,7 +1374,8 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		d.HasChange("keep_image_login") {
 
 		err = cvmService.StopInstance(ctx, instanceId, "KEEP_CHARGING")
-		if err != nil {
+		// continue when instance has been stopped
+		if err != nil && !isExpectError(err, []string{"UnsupportedOperation.InstanceStateStopped"}) {
 			return
 		}
 		err = resource.Retry(2*readRetryTimeout, func() *resource.RetryError {
