@@ -555,6 +555,14 @@ func resourceTencentCloudInstance() *schema.Resource {
 			},
 		},
 		CustomizeDiff: func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
+			// 系统盘缩容时发起销毁重建
+			oldSize, newSize := d.GetChange("system_disk_size")
+			if newSize.(int) < oldSize.(int) {
+				err := d.ForceNew("system_disk_size")
+				if err != nil {
+					return err
+				}
+			}
 			// delete 和 read 时 不调用
 			_, newCandidates := d.GetChange("instance_type_candidates")
 			oldType, _ := d.GetChange("instance_type")
