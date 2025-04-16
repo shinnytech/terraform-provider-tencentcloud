@@ -158,20 +158,26 @@ func resourceTencentCloudVpcRouteEntryCreate(d *schema.ResourceData, meta interf
 		return fmt.Errorf("if next_type is %s, next_hub can only be \"0\" ", GATE_WAY_TYPE_EIP)
 	}
 
-	// we only accept instance id as next_hub for nextType is NORMAL_CVM
+	// we accept instance or network interface attachment id as next_hub for nextType is NORMAL_CVM
+	// network interface attachment id is necessary as any change to the attachment will invalidate route entry
 	if nextType == GATE_WAY_TYPE_NORMAL_CVM {
 		cvmService := CvmService{
 			client: meta.(*TencentCloudClient).apiV3Conn,
 		}
-		var instanceSetIds []*string
-		filter := make(map[string]string)
-		// filter by instance-id to get private ip
-		filter["instance-id"] = nextHub
+		vpcService := VpcService{
+			client: meta.(*TencentCloudClient).apiV3Conn,
+		}
+		eniId, _, eniUsed := strings.Cut(nextHub, "+")
 
 		var instances []*cvm.Instance
+		var interfaces []*vpc.NetworkInterface
 		var errRet error
 		err := resource.Retry(readRetryTimeout, func() *resource.RetryError {
-			instances, errRet = cvmService.DescribeInstanceByFilter(ctx, instanceSetIds, filter)
+			if !eniUsed {
+				instances, errRet = cvmService.DescribeInstanceByFilter(ctx, []*string{&nextHub}, nil)
+			} else {
+				interfaces, errRet = vpcService.DescribeEniById(ctx, []string{eniId})
+			}
 			if errRet != nil {
 				return retryError(errRet, InternalError)
 			}
@@ -180,10 +186,23 @@ func resourceTencentCloudVpcRouteEntryCreate(d *schema.ResourceData, meta interf
 		if err != nil {
 			return err
 		}
-		if len(instances) != 1 {
+
+		if len(instances) == 1 {
+			nextHub = *(instances[0].PrivateIpAddresses[0]) // 此处为实例主网卡的第一个ip，当前cdk主网卡只有一个内网ip
+		} else if len(interfaces) == 1 {
+			for _, ip := range interfaces[0].PrivateIpAddressSet {
+				if ip.Primary != nil && *ip.Primary && ip.PrivateIpAddress != nil {
+					nextHub = *ip.PrivateIpAddress
+					interfaces = nil
+					break
+				}
+			}
+			if interfaces != nil {
+				return fmt.Errorf("cannot find primary ip address of interface %s", nextHub)
+			}
+		} else {
 			return fmt.Errorf("cannot find exact instance by id %s", nextHub)
 		}
-		nextHub = *(instances[0].PrivateIpAddresses[0]) // 此处为实例主网卡的第一个ip，当前cdk主网卡只有一个内网ip
 	}
 
 	// route cannot disable on create
@@ -244,21 +263,24 @@ func resourceTencentCloudVpcRouteEntryRead(d *schema.ResourceData, meta interfac
 				_ = d.Set("destination_cidr_block", v.destinationCidr)
 				_ = d.Set("next_type", v.nextType)
 
-				// convert next_hub to instance id if nextType is NORMAL_CVM
+				// convert next_hub to instance or network interface attachment id if nextType is NORMAL_CVM
 				if v.nextType == GATE_WAY_TYPE_NORMAL_CVM {
 					cvmService := CvmService{
 						client: meta.(*TencentCloudClient).apiV3Conn,
 					}
-					var instanceSetIds []*string
+					vpcService := VpcService{
+						client: meta.(*TencentCloudClient).apiV3Conn,
+					}
 					filter := make(map[string]string)
 					// filter by vpc-id and private ip, private ip is only unique in vpc
 					filter["private-ip-address"] = v.nextBub
 					filter["vpc-id"] = info.vpcId
 
 					var instances []*cvm.Instance
+					var interfaces []*vpc.NetworkInterface
 					var errRet error
 					err := resource.Retry(readRetryTimeout, func() *resource.RetryError {
-						instances, errRet = cvmService.DescribeInstanceByFilter(ctx, instanceSetIds, filter)
+						instances, errRet = cvmService.DescribeInstanceByFilter(ctx, nil, filter)
 						if errRet != nil {
 							return retryError(errRet, InternalError)
 						}
@@ -267,12 +289,30 @@ func resourceTencentCloudVpcRouteEntryRead(d *schema.ResourceData, meta interfac
 					if err != nil {
 						return resource.NonRetryableError(err)
 					}
-					if len(instances) != 1 {
+					err = resource.Retry(readRetryTimeout, func() *resource.RetryError {
+						interfaces, errRet = vpcService.DescribeEniByFilters(ctx, &info.vpcId, nil, nil, nil, nil, nil, &v.nextBub, nil)
+						if errRet != nil {
+							return retryError(errRet, InternalError)
+						}
+						return nil
+					})
+					if err != nil {
+						return resource.NonRetryableError(err)
+					}
+
+					if len(instances) == 1 {
+						d.Set("next_hub", *(instances[0].InstanceId))
+					} else if len(interfaces) == 1 {
+						cvmId := ""
+						if interfaces[0].Attachment != nil && interfaces[0].Attachment.InstanceId != nil {
+							cvmId = *(interfaces[0].Attachment.InstanceId)
+						}
+						d.Set("next_hub", *(interfaces[0].NetworkInterfaceId)+"+"+cvmId)
+					} else {
 						return resource.NonRetryableError(fmt.Errorf("cannot find exact instance by ip %s in vpc %s", v.nextBub, info.vpcId))
 					}
-					_ = d.Set("next_hub", *(instances[0].InstanceId))
 				} else {
-					_ = d.Set("next_hub", v.nextBub)
+					d.Set("next_hub", v.nextBub)
 				}
 
 				_ = d.Set("disabled", !v.enabled)
