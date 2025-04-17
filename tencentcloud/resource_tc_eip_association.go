@@ -203,7 +203,7 @@ func resourceTencentCloudEipAssociationCreate(d *schema.ResourceData, meta inter
 			if eip == nil {
 				return resource.NonRetryableError(fmt.Errorf("eip is not found"))
 			}
-			if *eip.AddressStatus == EIP_STATUS_BIND_ENI {
+			if *eip.AddressStatus == EIP_STATUS_BIND_ENI || *eip.AddressStatus == EIP_STATUS_BIND {
 				return nil
 			}
 			return resource.RetryableError(fmt.Errorf("wait for binding success: %s", *eip.AddressStatus))
