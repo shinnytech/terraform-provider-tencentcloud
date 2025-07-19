@@ -65,7 +65,6 @@ func resourceTencentCloudEipAssociation() *schema.Resource {
 				Type:     schema.TypeString,
 				ForceNew: true,
 				Optional: true,
-				Computed: true,
 				ConflictsWith: []string{
 					"network_interface_id",
 					"private_ip",
@@ -77,7 +76,6 @@ func resourceTencentCloudEipAssociation() *schema.Resource {
 				Type:         schema.TypeString,
 				ForceNew:     true,
 				Optional:     true,
-				Computed:     true,
 				ValidateFunc: validateStringLengthInRange(1, 25),
 				ConflictsWith: []string{
 					"instance_id",
@@ -88,7 +86,6 @@ func resourceTencentCloudEipAssociation() *schema.Resource {
 				Type:         schema.TypeString,
 				ForceNew:     true,
 				Optional:     true,
-				Computed:     true,
 				ValidateFunc: validateStringLengthInRange(7, 25),
 				ConflictsWith: []string{
 					"instance_id",
@@ -239,8 +236,31 @@ func resourceTencentCloudEipAssociationRead(d *schema.ResourceData, meta interfa
 		if errRet != nil {
 			return retryError(errRet)
 		}
-		if eip == nil {
+		if eip == nil || *eip.AddressStatus == EIP_STATUS_UNBIND {
 			d.SetId("")
+			return nil
+		}
+		// there is no easy way to ensure eip been bound to desired resource as all the InstanceId/NetworkInterfaceId/PrivateAddressIp fields been populated once bound
+		// eg: user want bind eip to cvm, but it's bound to the secondary eni of the same cvm instead, the only way to distinguish is by checking whether the eni is primary or not
+		d.Set("eip_id", *eip.AddressId)
+		// associate with instance
+		if len(association.InstanceId) > 0 {
+			if eip.InstanceId != nil {
+				d.Set("instance_id", *eip.InstanceId)
+			} else {
+				d.Set("instance_id", "")
+			}
+		} else {
+			if eip.NetworkInterfaceId != nil {
+				d.Set("network_interface_id", *eip.NetworkInterfaceId)
+			} else {
+				d.Set("network_interface_id", "")
+			}
+			if eip.PrivateAddressIp != nil {
+				d.Set("private_ip", *eip.PrivateAddressIp)
+			} else {
+				d.Set("private_ip", "")
+			}
 		}
 		return nil
 	})
@@ -248,15 +268,6 @@ func resourceTencentCloudEipAssociationRead(d *schema.ResourceData, meta interfa
 		return err
 	}
 
-	_ = d.Set("eip_id", association.EipId)
-	// associate with instance
-	if len(association.InstanceId) > 0 {
-		_ = d.Set("instance_id", association.InstanceId)
-		return nil
-	}
-
-	_ = d.Set("network_interface_id", association.NetworkInterfaceId)
-	_ = d.Set("private_ip", association.PrivateIp)
 	return nil
 }
 
