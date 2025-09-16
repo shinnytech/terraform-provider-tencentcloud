@@ -102,6 +102,7 @@ func resourceTencentCloudMysqlBackupPolicyV2() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Description: "定期保留策略周期起始日期，格式：YYYY-MM-dd HH:mm:ss",
+				Deprecated:  "腾讯云已废弃此参数",
 			},
 			"enable_backup_standby": {
 				Type:     schema.TypeString,
@@ -182,7 +183,6 @@ func resourceTencentCloudMysqlBackupPolicyV2Read(tfCtx context.Context, d *schem
 		_ = d.Set("backup_period_save_days", int(*desResponse.Response.BackupPeriodSaveDays))
 		_ = d.Set("backup_period_save_interval", *desResponse.Response.BackupPeriodSaveInterval)
 		_ = d.Set("backup_period_save_count", int(*desResponse.Response.BackupPeriodSaveCount))
-		_ = d.Set("start_backup_period_save_date", *desResponse.Response.StartBackupPeriodSaveDate)
 		_ = d.Set("enable_backup_standby", *desResponse.Response.EnableBackupStandby)
 		_ = d.Set("backup_standby_days", int(*desResponse.Response.BackupStandbyDays))
 		_ = d.Set("enable_binlog_standby", *desResponse.Response.EnableBinlogStandby)
@@ -204,20 +204,19 @@ func resourceTencentCloudMysqlBackupPolicyV2Update(tfCtx context.Context, d *sch
 	mysqlService := MysqlService{client: meta.(*TencentCloudClient).apiV3Conn}
 
 	var (
-		mysqlId                   = d.Get("mysql_id").(string)
-		retentionPeriod           = int64(d.Get("retention_period").(int))
-		backupMethod              = d.Get("backup_method").(string)
-		binlogExpireDays          = int64(d.Get("binlog_period").(int))
-		backupWindow              = d.Get("backup_window").(map[string]interface{})
-		enableBackupPeriodSave    = d.Get("enable_backup_period_save").(string)
-		backupPeriodSaveDays      = int64(d.Get("backup_period_save_days").(int))
-		backupPeriodSaveInterval  = d.Get("backup_period_save_interval").(string)
-		backupPeriodSaveCount     = int64(d.Get("backup_period_save_count").(int))
-		startBackupPeriodSaveDate = d.Get("start_backup_period_save_date").(string)
-		enableBackupStandby       = d.Get("enable_backup_standby").(string)
-		backupStandbyDays         = int64(d.Get("backup_standby_days").(int))
-		enableBinlogStandby       = d.Get("enable_binlog_standby").(string)
-		binlogStandbyDays         = int64(d.Get("binlog_standby_days").(int))
+		mysqlId                  = d.Get("mysql_id").(string)
+		retentionPeriod          = int64(d.Get("retention_period").(int))
+		backupMethod             = d.Get("backup_method").(string)
+		binlogExpireDays         = int64(d.Get("binlog_period").(int))
+		backupWindow             = d.Get("backup_window").(map[string]interface{})
+		enableBackupPeriodSave   = d.Get("enable_backup_period_save").(string)
+		backupPeriodSaveDays     = int64(d.Get("backup_period_save_days").(int))
+		backupPeriodSaveInterval = d.Get("backup_period_save_interval").(string)
+		backupPeriodSaveCount    = int64(d.Get("backup_period_save_count").(int))
+		enableBackupStandby      = d.Get("enable_backup_standby").(string)
+		backupStandbyDays        = int64(d.Get("backup_standby_days").(int))
+		enableBinlogStandby      = d.Get("enable_binlog_standby").(string)
+		binlogStandbyDays        = int64(d.Get("binlog_standby_days").(int))
 	)
 
 	if backupMethod != "physical" {
@@ -243,7 +242,7 @@ func resourceTencentCloudMysqlBackupPolicyV2Update(tfCtx context.Context, d *sch
 		err := mysqlService.ModifyBackupConfigByMysqlIdV2(ctx, mysqlId,
 			retentionPeriod, backupMethod, binlogExpireDays, timeWindow,
 			enableBackupPeriodSave, backupPeriodSaveDays, backupPeriodSaveInterval,
-			backupPeriodSaveCount, startBackupPeriodSaveDate, enableBackupStandby, backupStandbyDays,
+			backupPeriodSaveCount, enableBackupStandby, backupStandbyDays,
 			enableBinlogStandby, binlogStandbyDays)
 		if err != nil {
 			return diag.FromErr(err)
