@@ -63,7 +63,7 @@ func DataSourceTencentCloudVpcInstances() *schema.Resource {
 				Description: "The information list of the VPC.",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"vpc_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of the VPC.",
@@ -189,7 +189,7 @@ func dataSourceTencentCloudVpcInstancesRead(d *schema.ResourceData, meta interfa
 
 	for _, item := range vpcInfos {
 		var infoMap = make(map[string]interface{})
-		infoMap["vpc_id"] = item.vpcId
+		infoMap["id"] = item.vpcId
 		infoMap["name"] = item.name
 		infoMap["cidr_block"] = item.cidr
 		infoMap["is_default"] = item.isDefault
