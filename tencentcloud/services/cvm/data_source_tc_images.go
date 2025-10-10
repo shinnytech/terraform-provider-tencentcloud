@@ -64,7 +64,7 @@ func DataSourceTencentCloudImages() *schema.Resource {
 				Description: "An information list of image. Each element contains the following attributes:",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"image_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of the image.",
@@ -274,7 +274,7 @@ func dataSourceTencentCloudImagesRead(d *schema.ResourceData, meta interface{}) 
 		}
 
 		mapping := map[string]interface{}{
-			"image_id":           image.ImageId,
+			"id":                 image.ImageId,
 			"os_name":            image.OsName,
 			"image_type":         image.ImageType,
 			"created_time":       image.CreatedTime,
