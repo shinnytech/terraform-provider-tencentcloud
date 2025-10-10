@@ -260,6 +260,49 @@ func (me *MysqlService) ModifyBackupConfigByMysqlId(ctx context.Context, mysqlId
 		logId, request.GetAction(), request.ToJsonString(), response.ToJsonString())
 	return
 }
+
+// ModifyBackupConfigByMysqlIdV2 见 https://cloud.tencent.com/document/api/236/15839 备份落冷归档存储尚未上线，暂时不支持
+// 如果开启落冷，则备份数据在到达保留时间后，会自动转存到冷备标准存储中，标准存储不占用免费备份空间
+func (me *MysqlService) ModifyBackupConfigByMysqlIdV2(ctx context.Context, mysqlId string,
+	retentionPeriod int64, backupMethod string, binlogExpireDays int64, backupWindow cdb.CommonTimeWindow,
+	enableBackupPeriodSave string, backupPeriodSaveDays int64, backupPeriodSaveInterval string,
+	backupPeriodSaveCount int64, enableBackupStandby string, backupStandbyDays int64,
+	enableBinlogStandby string, binlogStandbyDays int64) (errRet error) {
+	logId := tccommon.GetLogId(ctx)
+
+	request := cdb.NewModifyBackupConfigRequest()
+	request.InstanceId = &mysqlId
+	request.ExpireDays = &retentionPeriod
+	request.BackupMethod = &backupMethod // 目前只支持物理备份
+	request.BinlogExpireDays = &binlogExpireDays
+	request.BackupTimeWindow = &backupWindow
+	request.EnableBackupPeriodSave = &enableBackupPeriodSave
+	request.BackupPeriodSaveDays = &backupPeriodSaveDays
+	request.BackupPeriodSaveInterval = &backupPeriodSaveInterval
+	request.BackupPeriodSaveCount = &backupPeriodSaveCount
+	request.EnableBackupStandby = &enableBackupStandby
+	request.BackupStandbyDays = &backupStandbyDays
+	request.EnableBinlogStandby = &enableBinlogStandby
+	request.BinlogStandbyDays = &binlogStandbyDays
+
+	defer func() {
+		if errRet != nil {
+			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), errRet.Error())
+		}
+	}()
+
+	ratelimit.Check(request.GetAction())
+	response, err := me.client.UseMysqlClient().ModifyBackupConfig(request)
+	if err != nil {
+		errRet = err
+		return
+	}
+	log.Printf("[DEBUG]%s api[%s] success, request body [%s], response body [%s]\n",
+		logId, request.GetAction(), request.ToJsonString(), response.ToJsonString())
+	return
+}
+
 func (me *MysqlService) DescribeDefaultParameters(ctx context.Context, engineVersion string) (parameterList []*cdb.ParameterDetail, errRet error) {
 	logId := tccommon.GetLogId(ctx)
 

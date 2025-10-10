@@ -1425,6 +1425,7 @@ func Provider() *schema.Provider {
 			"tencentcloud_kubernetes_encryption_protection":                                         tke.ResourceTencentCloudKubernetesEncryptionProtection(),
 			"tencentcloud_kubernetes_cluster_master_attachment":                                     tke.ResourceTencentCloudKubernetesClusterMasterAttachment(),
 			"tencentcloud_mysql_backup_policy":                                                      cdb.ResourceTencentCloudMysqlBackupPolicy(),
+			"tencentcloud_mysql_backup_policy_v2":                                                   cdb.ResourceTencentCloudMysqlBackupPolicyV2(),
 			"tencentcloud_mysql_account":                                                            cdb.ResourceTencentCloudMysqlAccount(),
 			"tencentcloud_mysql_account_privilege":                                                  cdb.ResourceTencentCloudMysqlAccountPrivilege(),
 			"tencentcloud_mysql_privilege":                                                          cdb.ResourceTencentCloudMysqlPrivilege(),
