@@ -62,8 +62,12 @@ func ResourceTencentCloudMysqlPrivilege() *schema.Resource {
 				Description: "Account host, default is `%`.",
 			},
 			"global": {
-				Type:     schema.TypeSet,
-				Required: true,
+				Type: schema.TypeSet,
+				// Workaround： 将Required变为Optional+Computed.
+				// Issue: plugin sdk 会错误地在create时候把赋值给required的`[]`变为nullVal, 然后在read变回`[]`,
+				//        见 https://github.com/hashicorp/terraform-plugin-sdk/issues/766
+				Optional: true,
+				Computed: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Set: func(v interface{}) int {
 					return helper.HashString(v.(string))
