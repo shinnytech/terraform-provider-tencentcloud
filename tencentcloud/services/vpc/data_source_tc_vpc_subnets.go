@@ -93,7 +93,7 @@ func DataSourceTencentCloudVpcSubnets() *schema.Resource {
 							Computed:    true,
 							Description: "ID of the VPC.",
 						},
-						"subnet_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of the subnet.",
@@ -239,7 +239,7 @@ func dataSourceTencentCloudVpcSubnetsRead(d *schema.ResourceData, meta interface
 		var infoMap = make(map[string]interface{})
 		infoMap["availability_zone"] = item.zone
 		infoMap["vpc_id"] = item.vpcId
-		infoMap["subnet_id"] = item.subnetId
+		infoMap["id"] = item.subnetId
 		infoMap["name"] = item.name
 		infoMap["cidr_block"] = item.cidr
 		infoMap["cdc_id"] = item.cdcId
