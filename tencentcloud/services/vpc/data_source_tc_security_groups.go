@@ -60,7 +60,7 @@ func DataSourceTencentCloudSecurityGroups() *schema.Resource {
 				Description: "Information list of security group.",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"security_group_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of the security group.",
@@ -227,7 +227,7 @@ func dataSourceTencentCloudSecurityGroupsRead(d *schema.ResourceData, m interfac
 			}
 
 			sgInstances = append(sgInstances, map[string]interface{}{
-				"security_group_id":  *sg.SecurityGroupId,
+				"id":                 *sg.SecurityGroupId,
 				"name":               *sg.SecurityGroupName,
 				"description":        *sg.SecurityGroupDesc,
 				"create_time":        *sg.CreatedTime,
