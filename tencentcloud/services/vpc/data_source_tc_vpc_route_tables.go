@@ -64,7 +64,7 @@ func DataSourceTencentCloudVpcRouteTables() *schema.Resource {
 				Description: "The information list of the VPC route table.",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"route_table_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of the routing table.",
@@ -217,7 +217,7 @@ func dataSourceTencentCloudVpcRouteTablesRead(d *schema.ResourceData, meta inter
 
 		var infoMap = make(map[string]interface{})
 
-		infoMap["route_table_id"] = item.routeTableId
+		infoMap["id"] = item.routeTableId
 		infoMap["name"] = item.name
 		infoMap["vpc_id"] = item.vpcId
 		infoMap["is_default"] = item.isDefault
