@@ -185,6 +185,8 @@ func resourceTencentCloudNatGatewayCreate(d *schema.ResourceData, meta interface
 		}
 	}
 
+	request.StockPublicIpAddressesBandwidthOut = helper.Uint64(2000)
+
 	var response *vpc.CreateNatGatewayResponse
 	err := resource.Retry(tccommon.ReadRetryTimeout, func() *resource.RetryError {
 		result, e := meta.(tccommon.ProviderMeta).GetAPIV3Conn().UseVpcClient().CreateNatGateway(request)
