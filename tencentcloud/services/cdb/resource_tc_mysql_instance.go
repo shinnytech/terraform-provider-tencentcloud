@@ -126,8 +126,8 @@ func TencentMsyqlBasicInfo() map[string]*schema.Schema {
 		},
 		"subnet_id": {
 			Type:         schema.TypeString,
-			Optional:     true,
-			Computed:     true,
+			Required:     true,
+			ForceNew:     true,
 			ValidateFunc: tccommon.ValidateStringLengthInRange(1, 100),
 			Description:  "Private network ID. If `vpc_id` is set, this value is required.",
 		},
