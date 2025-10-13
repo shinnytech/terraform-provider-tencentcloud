@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gofrs/flock"
+
 	tccommon "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/common"
 	svctag "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/services/tag"
 
@@ -381,8 +383,19 @@ func resourceTencentCloudCbsStorageRead(d *schema.ResourceData, meta interface{}
 	return nil
 }
 
-func resourceTencentCloudCbsStorageUpdate(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudCbsStorageUpdate(d *schema.ResourceData, meta interface{}) (errUpdate error) {
 	defer tccommon.LogElapsed("resource.tencentcloud_cbs_storage.update")()
+
+	diskLock := flock.New("/run/lock/terraform-tencentcloud-disk-" + d.Id() + ".lock")
+	if err := diskLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		err := diskLock.Unlock()
+		if errUpdate == nil {
+			errUpdate = err
+		}
+	}()
 
 	var (
 		logId      = tccommon.GetLogId(tccommon.ContextNil)

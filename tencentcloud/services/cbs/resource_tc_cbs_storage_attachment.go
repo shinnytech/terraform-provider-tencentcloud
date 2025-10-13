@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gofrs/flock"
+
 	tccommon "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/common"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
@@ -39,8 +41,30 @@ func ResourceTencentCloudCbsStorageAttachment() *schema.Resource {
 	}
 }
 
-func resourceTencentCloudCbsStorageAttachmentCreate(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudCbsStorageAttachmentCreate(d *schema.ResourceData, meta interface{}) (errCreate error) {
 	defer tccommon.LogElapsed("resource.tencentcloud_cbs_storage_attachment.create")()
+
+	diskLock := flock.New("/run/lock/terraform-tencentcloud-disk-" + d.Get("storage_id").(string) + ".lock")
+	if err := diskLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		err := diskLock.Unlock()
+		if errCreate == nil {
+			errCreate = err
+		}
+	}()
+
+	cvmLock := flock.New("/run/lock/terraform-tencentcloud-cvm-" + d.Get("instance_id").(string) + ".lock")
+	if err := cvmLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		err := cvmLock.Unlock()
+		if errCreate == nil {
+			errCreate = err
+		}
+	}()
 
 	logId := tccommon.GetLogId(tccommon.ContextNil)
 	ctx := context.WithValue(context.TODO(), tccommon.LogIdKey, logId)
@@ -132,8 +156,30 @@ func resourceTencentCloudCbsStorageAttachmentRead(d *schema.ResourceData, meta i
 	return nil
 }
 
-func resourceTencentCloudCbsStorageAttachmentDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceTencentCloudCbsStorageAttachmentDelete(d *schema.ResourceData, meta interface{}) (errDelete error) {
 	defer tccommon.LogElapsed("resource.tencentcloud_cbs_storage_attachment.delete")()
+
+	diskLock := flock.New("/run/lock/terraform-tencentcloud-disk-" + d.Get("storage_id").(string) + ".lock")
+	if err := diskLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		err := diskLock.Unlock()
+		if errDelete == nil {
+			errDelete = err
+		}
+	}()
+
+	cvmLock := flock.New("/run/lock/terraform-tencentcloud-cvm-" + d.Get("instance_id").(string) + ".lock")
+	if err := cvmLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		err := cvmLock.Unlock()
+		if errDelete == nil {
+			errDelete = err
+		}
+	}()
 
 	logId := tccommon.GetLogId(tccommon.ContextNil)
 	ctx := context.WithValue(context.TODO(), tccommon.LogIdKey, logId)

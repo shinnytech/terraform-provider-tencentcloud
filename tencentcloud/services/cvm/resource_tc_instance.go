@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/flock"
+
 	tccommon "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/common"
 	svccbs "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/services/cbs"
 	svctag "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/services/tag"
@@ -1765,6 +1767,17 @@ func resourceTencentCloudInstanceRead(d *schema.ResourceData, meta interface{}) 
 
 func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}) (err error) {
 	defer tccommon.LogElapsed("resource.tencentcloud_instance.update")()
+
+	cvmLock := flock.New("/run/lock/terraform-tencentcloud-cvm-" + d.Id() + ".lock")
+	if err = cvmLock.Lock(); err != nil {
+		return err
+	}
+	defer func() {
+		unlockErr := cvmLock.Unlock()
+		if err == nil {
+			err = unlockErr
+		}
+	}()
 
 	var (
 		logId      = tccommon.GetLogId(tccommon.ContextNil)
