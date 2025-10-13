@@ -353,10 +353,26 @@ func (me *CvmService) ModifyProjectId(ctx context.Context, instanceId string, pr
 
 func (me *CvmService) ModifyInstanceType(ctx context.Context, instanceId, instanceType string) error {
 	logId := tccommon.GetLogId(ctx)
+	// 根据文档 https://cloud.tencent.com/document/api/213/15744 中的建议，先停止实例再修改实例类型
+	err := me.StopInstance(ctx, instanceId, "KEEP_CHARGING")
+	if err != nil {
+		return err
+	}
+	err = resource.Retry(2*tccommon.ReadRetryTimeout, func() *resource.RetryError {
+		instance, errRet := me.DescribeInstanceById(ctx, instanceId)
+		if errRet != nil {
+			return tccommon.RetryError(errRet, tccommon.InternalError)
+		} else if *instance.InstanceState != CVM_STATUS_STOPPED {
+			return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 	request := cvm.NewResetInstancesTypeRequest()
 	request.InstanceIds = []*string{&instanceId}
 	request.InstanceType = &instanceType
-	request.ForceStop = helper.Bool(true)
 
 	ratelimit.Check(request.GetAction())
 	response, err := me.client.UseCvmClient().ResetInstancesType(request)

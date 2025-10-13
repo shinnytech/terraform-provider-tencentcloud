@@ -1786,6 +1786,38 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		cvmService = CvmService{client: meta.(tccommon.ProviderMeta).GetAPIV3Conn()}
 	)
 
+	// recover instance power status
+	defer func() {
+		var instance *cvm.Instance
+		var target string
+		if err != nil {
+			return
+		} else if instance, err = cvmService.DescribeInstanceById(ctx, instanceId); err != nil {
+			return
+		} else if *instance.InstanceState == CVM_STATUS_STOPPED && d.Get("running_flag").(bool) {
+			err = cvmService.StartInstance(ctx, instanceId)
+			target = CVM_STATUS_RUNNING
+		} else if *instance.InstanceState == CVM_STATUS_RUNNING && !d.Get("running_flag").(bool) {
+			err = cvmService.StopInstance(ctx, instanceId, d.Get("stopped_mode").(string)) // default is "KEEP_CHARGING"
+			target = CVM_STATUS_STOPPED
+		} else {
+			return
+		}
+
+		if err != nil {
+			return
+		}
+		err = resource.Retry(2*tccommon.ReadRetryTimeout, func() *resource.RetryError {
+			instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+			if errRet != nil {
+				return tccommon.RetryError(errRet, tccommon.InternalError)
+			} else if *instance.InstanceState != target {
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			}
+			return nil
+		})
+	}()
+
 	d.Partial(true)
 
 	// Get the latest instance info from actual resource.
@@ -1950,6 +1982,23 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		d.HasChange("disable_monitor_service") ||
 		d.HasChange("disable_automation_service") ||
 		d.HasChange("keep_image_login") {
+
+		err = cvmService.StopInstance(ctx, instanceId, "KEEP_CHARGING")
+		if err != nil {
+			return
+		}
+		err = resource.Retry(2*tccommon.ReadRetryTimeout, func() *resource.RetryError {
+			instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+			if errRet != nil {
+				return tccommon.RetryError(errRet, tccommon.InternalError)
+			} else if *instance.InstanceState != CVM_STATUS_STOPPED {
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			}
+			return nil
+		})
+		if err != nil {
+			return
+		}
 
 		request := cvm.NewResetInstanceRequest()
 		request.InstanceId = helper.String(d.Id())
