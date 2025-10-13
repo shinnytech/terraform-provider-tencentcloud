@@ -135,6 +135,7 @@ func TencentMsyqlBasicInfo() map[string]*schema.Schema {
 		"security_groups": {
 			Type:     schema.TypeSet,
 			Optional: true,
+			Computed: true,
 			Elem:     &schema.Schema{Type: schema.TypeString},
 			Set: func(v interface{}) int {
 				return helper.HashString(v.(string))
