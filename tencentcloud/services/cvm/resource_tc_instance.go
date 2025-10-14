@@ -2284,7 +2284,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		//diskId := d.Get("system_disk_id").(string)
 		req := cvm.NewResizeInstanceDisksRequest()
 		req.InstanceId = &instanceId
-		req.ForceStop = helper.Bool(true)
+		req.ForceStop = helper.Bool(false)
 		req.SystemDisk = &cvm.SystemDisk{
 			DiskSize: helper.IntInt64(size),
 			DiskType: &diskType,
