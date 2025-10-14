@@ -2047,7 +2047,8 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		d.HasChange("keep_image_login") {
 
 		err = cvmService.StopInstance(ctx, instanceId, "KEEP_CHARGING")
-		if err != nil {
+		// continue when instance has been stopped
+		if err != nil && !tccommon.IsExpectError(err, []string{"UnsupportedOperation.InstanceStateStopped"}) {
 			return
 		}
 		err = resource.Retry(2*tccommon.ReadRetryTimeout, func() *resource.RetryError {
