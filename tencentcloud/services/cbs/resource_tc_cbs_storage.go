@@ -88,7 +88,7 @@ func ResourceTencentCloudCbsStorage() *schema.Resource {
 			"snapshot_id": {
 				Type:        schema.TypeString,
 				Optional:    true,
-				Computed:    true,
+				ForceNew:    true,
 				Description: "ID of the snapshot. If specified, created the CBS by this snapshot.",
 			},
 			"project_id": {
