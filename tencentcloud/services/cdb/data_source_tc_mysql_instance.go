@@ -112,7 +112,7 @@ func DataSourceTencentCloudMysqlInstance() *schema.Resource {
 				Description: "A list of instances. Each element contains the following attributes:",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"mysql_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "Instance ID, such as `cdb-c1nl9rpv`. It is identical to the instance ID displayed in the database console page.",
@@ -137,7 +137,7 @@ func DataSourceTencentCloudMysqlInstance() *schema.Resource {
 							Computed:    true,
 							Description: "Instance status. Available values: `0` - Creating; `1` - Running; `4` - Isolating; `5` - Isolated.",
 						},
-						"zone": {
+						"availability_zone": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "Information of available zone.",
@@ -378,31 +378,31 @@ func dataSourceTencentCloudMysqlInstanceRead(d *schema.ResourceData, meta interf
 	ids := make([]string, 0, len(instanceDetails))
 	for _, item := range instanceDetails {
 		mapping := map[string]interface{}{
-			"mysql_id":        item.InstanceId,
-			"instance_name":   item.InstanceName,
-			"instance_role":   MYSQL_ROLE_MAP[*item.InstanceType],
-			"init_flag":       item.InitFlag,
-			"status":          item.Status,
-			"zone":            item.Zone,
-			"auto_renew_flag": item.AutoRenew,
-			"engine_version":  item.EngineVersion,
-			"cpu_core_count":  item.Cpu,
-			"memory_size":     item.Memory,
-			"volume_size":     item.Volume,
-			"internet_status": item.WanStatus,
-			"internet_host":   item.WanDomain,
-			"internet_port":   item.WanPort,
-			"intranet_ip":     item.Vip,
-			"intranet_port":   item.Vport,
-			"project_id":      item.ProjectId,
-			"vpc_id":          item.UniqVpcId,
-			"subnet_id":       item.UniqSubnetId,
-			"slave_sync_mode": item.ProtectMode,
-			"device_type":     item.DeviceType,
-			"pay_type":        item.PayType,
-			"create_time":     item.CreateTime,
-			"dead_line_time":  item.DeadlineTime,
-			"charge_type":     MYSQL_CHARGE_TYPE[int(*item.PayType)],
+			"id":                item.InstanceId,
+			"instance_name":     item.InstanceName,
+			"instance_role":     MYSQL_ROLE_MAP[*item.InstanceType],
+			"init_flag":         item.InitFlag,
+			"status":            item.Status,
+			"availability_zone": item.Zone,
+			"auto_renew_flag":   item.AutoRenew,
+			"engine_version":    item.EngineVersion,
+			"cpu_core_count":    item.Cpu,
+			"memory_size":       item.Memory,
+			"volume_size":       item.Volume,
+			"internet_status":   item.WanStatus,
+			"internet_host":     item.WanDomain,
+			"internet_port":     item.WanPort,
+			"intranet_ip":       item.Vip,
+			"intranet_port":     item.Vport,
+			"project_id":        item.ProjectId,
+			"vpc_id":            item.UniqVpcId,
+			"subnet_id":         item.UniqSubnetId,
+			"slave_sync_mode":   item.ProtectMode,
+			"device_type":       item.DeviceType,
+			"pay_type":          item.PayType,
+			"create_time":       item.CreateTime,
+			"dead_line_time":    item.DeadlineTime,
+			"charge_type":       MYSQL_CHARGE_TYPE[int(*item.PayType)],
 		}
 		if item.MasterInfo != nil {
 			mapping["master_instance_id"] = item.MasterInfo.InstanceId
