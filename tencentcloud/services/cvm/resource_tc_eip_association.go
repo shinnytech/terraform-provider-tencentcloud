@@ -36,7 +36,6 @@ func ResourceTencentCloudEipAssociation() *schema.Resource {
 				Type:     schema.TypeString,
 				ForceNew: true,
 				Optional: true,
-				Computed: true,
 				ConflictsWith: []string{
 					"network_interface_id",
 					"private_ip",
@@ -48,7 +47,6 @@ func ResourceTencentCloudEipAssociation() *schema.Resource {
 				Type:         schema.TypeString,
 				ForceNew:     true,
 				Optional:     true,
-				Computed:     true,
 				ValidateFunc: tccommon.ValidateStringLengthInRange(1, 25),
 				ConflictsWith: []string{
 					"instance_id",
@@ -59,7 +57,6 @@ func ResourceTencentCloudEipAssociation() *schema.Resource {
 				Type:         schema.TypeString,
 				ForceNew:     true,
 				Optional:     true,
-				Computed:     true,
 				ValidateFunc: tccommon.ValidateStringLengthInRange(7, 25),
 				ConflictsWith: []string{
 					"instance_id",
@@ -219,7 +216,6 @@ func resourceTencentCloudEipAssociationRead(d *schema.ResourceData, meta interfa
 		ctx        = context.WithValue(context.TODO(), tccommon.LogIdKey, logId)
 		vpcService = svcvpc.NewVpcService(meta.(tccommon.ProviderMeta).GetAPIV3Conn())
 		id         = d.Id()
-		eipAddress *vpc.Address
 	)
 
 	association, err := ParseEipAssociationId(id)
@@ -233,10 +229,33 @@ func resourceTencentCloudEipAssociationRead(d *schema.ResourceData, meta interfa
 			return tccommon.RetryError(errRet)
 		}
 
-		if eip == nil {
+		if eip == nil || *eip.AddressStatus == svcvpc.EIP_STATUS_UNBIND {
 			d.SetId("")
+			return nil
 		}
-		eipAddress = eip
+		// there is no easy way to ensure eip been bound to desired resource as all the InstanceId/NetworkInterfaceId/PrivateAddressIp fields been populated once bound
+		// eg: user want bind eip to cvm, but it's bound to the secondary eni of the same cvm instead, the only way to distinguish is by checking whether the eni is primary or not
+		_ = d.Set("eip_id", *eip.AddressId)
+
+		// associate with instance
+		if len(association.InstanceId) > 0 {
+			if eip.InstanceId != nil {
+				_ = d.Set("instance_id", *eip.InstanceId)
+			} else {
+				_ = d.Set("instance_id", "")
+			}
+		} else {
+			if eip.NetworkInterfaceId != nil {
+				_ = d.Set("network_interface_id", *eip.NetworkInterfaceId)
+			} else {
+				_ = d.Set("network_interface_id", "")
+			}
+			if eip.PrivateAddressIp != nil {
+				_ = d.Set("private_ip", *eip.PrivateAddressIp)
+			} else {
+				_ = d.Set("private_ip", "")
+			}
+		}
 
 		return nil
 	})
@@ -245,18 +264,6 @@ func resourceTencentCloudEipAssociationRead(d *schema.ResourceData, meta interfa
 		return err
 	}
 
-	_ = d.Set("eip_id", association.EipId)
-	// associate with instance
-	if len(association.InstanceId) > 0 {
-		_ = d.Set("instance_id", association.InstanceId)
-		return nil
-	}
-
-	_ = d.Set("network_interface_id", association.NetworkInterfaceId)
-	_ = d.Set("private_ip", association.PrivateIp)
-	if eipAddress.DedicatedClusterId != nil {
-		_ = d.Set("cdc_id", eipAddress.DedicatedClusterId)
-	}
 	return nil
 }
 
