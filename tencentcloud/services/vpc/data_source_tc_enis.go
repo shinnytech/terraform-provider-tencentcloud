@@ -131,7 +131,7 @@ func DataSourceTencentCloudEnis() *schema.Resource {
 							Computed:    true,
 							Description: "States of the ENI.",
 						},
-						"ipv4s": {
+						"ipv4_info": {
 							Type:        schema.TypeList,
 							Computed:    true,
 							Description: "A set of intranet IPv4s.",
@@ -323,7 +323,7 @@ func dataSourceTencentCloudEnisRead(d *schema.ResourceData, m interface{}) error
 			"mac":             eni.MacAddress,
 			"state":           eni.State,
 			"create_time":     eni.CreatedTime,
-			"ipv4s":           ipv4s,
+			"ipv4_info":       ipv4s,
 			"ipv6s":           ipv6s,
 			"security_groups": sgs,
 			"tags":            respTags,
