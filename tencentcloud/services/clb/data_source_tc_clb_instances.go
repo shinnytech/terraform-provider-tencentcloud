@@ -55,7 +55,7 @@ func DataSourceTencentCloudClbInstances() *schema.Resource {
 				Description: "A list of cloud load balancers. Each element contains the following attributes:",
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
-						"clb_id": {
+						"id": {
 							Type:        schema.TypeString,
 							Computed:    true,
 							Description: "ID of CLB.",
@@ -239,7 +239,7 @@ func dataSourceTencentCloudClbInstancesRead(d *schema.ResourceData, meta interfa
 	ids := make([]string, 0, len(clbs))
 	for _, clbInstance := range clbs {
 		mapping := map[string]interface{}{
-			"clb_id":                    clbInstance.LoadBalancerId,
+			"id":                        clbInstance.LoadBalancerId,
 			"clb_name":                  clbInstance.LoadBalancerName,
 			"network_type":              clbInstance.LoadBalancerType,
 			"status":                    clbInstance.Status,
