@@ -355,7 +355,7 @@ func (me *CvmService) ModifyInstanceType(ctx context.Context, instanceId, instan
 	logId := tccommon.GetLogId(ctx)
 	// 根据文档 https://cloud.tencent.com/document/api/213/15744 中的建议，先停止实例再修改实例类型
 	err := me.StopInstance(ctx, instanceId, "KEEP_CHARGING")
-	if err != nil {
+	if err != nil && !tccommon.IsExpectError(err, []string{"UnsupportedOperation.InstanceStateStopped"}) {
 		return err
 	}
 	err = resource.Retry(2*tccommon.ReadRetryTimeout, func() *resource.RetryError {

@@ -2146,6 +2146,10 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		if err := cvmService.ResetInstance(ctx, request); err != nil {
 			return err
 		}
+
+		if err = waitForOperationFinished(d, meta, 5*tccommon.ReadRetryTimeout, CVM_LATEST_OPERATION_STATE_OPERATING, false); err != nil {
+			return err
+		}
 		// Modify Login Info Directly
 	} else {
 		if d.HasChange("password") {
@@ -2894,7 +2898,10 @@ func resourceTencentCloudInstanceDelete(d *schema.ResourceData, meta interface{}
 
 func switchInstance(cvmService *CvmService, ctx context.Context, d *schema.ResourceData, flag bool) (err error) {
 	instanceId := d.Id()
-	if flag {
+	var instance *cvm.Instance
+	if instance, err = cvmService.DescribeInstanceById(ctx, instanceId); err != nil {
+		return
+	} else if *instance.InstanceState == CVM_STATUS_STOPPED && flag {
 		err = cvmService.StartInstance(ctx, instanceId)
 		if err != nil {
 			return err
@@ -2916,7 +2923,7 @@ func switchInstance(cvmService *CvmService, ctx context.Context, d *schema.Resou
 		if err != nil {
 			return err
 		}
-	} else {
+	} else if *instance.InstanceState == CVM_STATUS_RUNNING && !flag {
 		stoppedMode := d.Get("stopped_mode").(string)
 		skipStopApi := false
 		err = resource.Retry(tccommon.WriteRetryTimeout, func() *resource.RetryError {
@@ -2973,6 +2980,9 @@ func switchInstance(cvmService *CvmService, ctx context.Context, d *schema.Resou
 		if err != nil {
 			return err
 		}
+	} else {
+		err = fmt.Errorf("cvm instance status is %s, cannot switch", *instance.InstanceState)
+		return
 	}
 
 	return nil
