@@ -19,6 +19,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
 	sdkErrors "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/errors"
+	cvm "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/cvm/v20170312"
 	vpc "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/vpc/v20170312"
 
 	"github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/connectivity"
@@ -8555,5 +8556,50 @@ func (me *VpcService) DescribeElasticPublicIpv6sByFilter(ctx context.Context, pa
 		offset += limit
 	}
 
+	return
+}
+
+func (me *VpcService) DescribeCvmInstanceByFilter(ctx context.Context, instancesId []*string, filters map[string]string) (instances []*cvm.Instance, errRet error) {
+	logId := tccommon.GetLogId(ctx)
+	request := cvm.NewDescribeInstancesRequest()
+	if instancesId != nil {
+		request.InstanceIds = instancesId
+	} else {
+		request.Filters = make([]*cvm.Filter, 0, len(filters))
+		for k, v := range filters {
+			filter := cvm.Filter{
+				Name:   helper.String(k),
+				Values: []*string{helper.String(v)},
+			}
+			request.Filters = append(request.Filters, &filter)
+		}
+	}
+
+	var offset int64 = 0
+	var pageSize int64 = 100
+	instances = make([]*cvm.Instance, 0)
+	for {
+		request.Offset = &offset
+		request.Limit = &pageSize
+		ratelimit.Check(request.GetAction())
+		response, err := me.client.UseCvmClient().DescribeInstances(request)
+		if err != nil {
+			log.Printf("[CRITAL]%s api[%s] fail, request body [%s], reason[%s]\n",
+				logId, request.GetAction(), request.ToJsonString(), err.Error())
+			errRet = err
+			return
+		}
+		log.Printf("[DEBUG]%s api[%s] success, request body [%s], response body [%s]\n",
+			logId, request.GetAction(), request.ToJsonString(), response.ToJsonString())
+
+		if response == nil || len(response.Response.InstanceSet) < 1 {
+			break
+		}
+		instances = append(instances, response.Response.InstanceSet...)
+		if len(response.Response.InstanceSet) < int(pageSize) {
+			break
+		}
+		offset += pageSize
+	}
 	return
 }
