@@ -19,28 +19,29 @@ func ResourceTencentCloudMysqlDatabase() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceTencentCloudMysqlDatabaseCreate,
 		Read:   resourceTencentCloudMysqlDatabaseRead,
-		Update: resourceTencentCloudMysqlDatabaseUpdate,
 		Delete: resourceTencentCloudMysqlDatabaseDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
 		Schema: map[string]*schema.Schema{
-			"instance_id": {
+			"mysql_id": {
 				Required:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 				Description: "Instance ID in the format of `cdb-c1nl9rpv`,  which is the same as the one displayed in the TencentDB console.",
 			},
 
-			"db_name": {
+			"name": {
 				Required:    true,
 				ForceNew:    true,
 				Type:        schema.TypeString,
 				Description: "Name of Database.",
 			},
 
-			"character_set_name": {
-				Required:     true,
+			"character_set": {
+				Optional:     true,
+				ForceNew:     true,
+				Default:      "utf8mb4",
 				Type:         schema.TypeString,
 				ValidateFunc: tccommon.ValidateAllowedStringValue([]string{"utf8", "gbk", "latin1", "utf8mb4"}),
 				Description:  "Character set. Valid values:  `utf8`, `gbk`, `latin1`, `utf8mb4`.",
@@ -60,17 +61,17 @@ func resourceTencentCloudMysqlDatabaseCreate(d *schema.ResourceData, meta interf
 		instanceId string
 		dBName     string
 	)
-	if v, ok := d.GetOk("instance_id"); ok {
+	if v, ok := d.GetOk("mysql_id"); ok {
 		instanceId = v.(string)
 		request.InstanceId = helper.String(v.(string))
 	}
 
-	if v, ok := d.GetOk("db_name"); ok {
+	if v, ok := d.GetOk("name"); ok {
 		dBName = v.(string)
 		request.DBName = helper.String(v.(string))
 	}
 
-	if v, ok := d.GetOk("character_set_name"); ok {
+	if v, ok := d.GetOk("character_set"); ok {
 		request.CharacterSetName = helper.String(v.(string))
 	}
 
@@ -121,36 +122,22 @@ func resourceTencentCloudMysqlDatabaseRead(d *schema.ResourceData, meta interfac
 		return nil
 	}
 
-	_ = d.Set("instance_id", instanceId)
+	_ = d.Set("mysql_id", instanceId)
 
 	if database.DatabaseName != nil {
-		_ = d.Set("db_name", database.DatabaseName)
+		_ = d.Set("name", database.DatabaseName)
 	}
 
 	if database.CharacterSet != nil {
 		if *database.CharacterSet == "UTF8MB3" {
-			_ = d.Set("character_set_name", "utf8")
+			_ = d.Set("character_set", "utf8")
 		} else {
-			_ = d.Set("character_set_name", strings.ToLower(*database.CharacterSet))
+			_ = d.Set("character_set", strings.ToLower(*database.CharacterSet))
 		}
 
 	}
 
 	return nil
-}
-
-func resourceTencentCloudMysqlDatabaseUpdate(d *schema.ResourceData, meta interface{}) error {
-	defer tccommon.LogElapsed("resource.tencentcloud_mysql_database.update")()
-	defer tccommon.InconsistentCheck(d, meta)()
-
-	immutableArgs := []string{"character_set_name"}
-
-	for _, v := range immutableArgs {
-		if d.HasChange(v) {
-			return fmt.Errorf("argument `%s` cannot be changed", v)
-		}
-	}
-	return resourceTencentCloudMysqlDatabaseRead(d, meta)
 }
 
 func resourceTencentCloudMysqlDatabaseDelete(d *schema.ResourceData, meta interface{}) error {
