@@ -88,7 +88,7 @@ func ResourceTencentCloudClbInstance() *schema.Resource {
 				Computed:    true,
 				Description: "Internet charge type, only applicable to open CLB. Valid values are `TRAFFIC_POSTPAID_BY_HOUR`, `BANDWIDTH_POSTPAID_BY_HOUR` and `BANDWIDTH_PACKAGE`.",
 			},
-			"delete_protect": {
+			"deletion_protection": {
 				Type:        schema.TypeBool,
 				Optional:    true,
 				Description: "Whether to enable delete protection.",
@@ -567,33 +567,31 @@ func resourceTencentCloudClbInstanceCreate(d *schema.ResourceData, meta interfac
 		}
 	}
 
-	if v, ok := d.GetOkExists("delete_protect"); ok {
+	if v, ok := d.GetOkExists("deletion_protection"); ok {
 		isDeleteProect := v.(bool)
-		if isDeleteProect {
-			mRequest := clb.NewModifyLoadBalancerAttributesRequest()
-			mRequest.LoadBalancerId = helper.String(clbId)
-			mRequest.DeleteProtect = &isDeleteProect
-			err := resource.Retry(tccommon.WriteRetryTimeout, func() *resource.RetryError {
-				mResponse, e := meta.(tccommon.ProviderMeta).GetAPIV3Conn().UseClbClient().ModifyLoadBalancerAttributes(mRequest)
-				if e != nil {
-					return tccommon.RetryError(e)
-				} else {
-					log.Printf("[DEBUG]%s api[%s] success, request body [%s], response body [%s]\n",
-						logId, mRequest.GetAction(), mRequest.ToJsonString(), mResponse.ToJsonString())
-					requestId := *mResponse.Response.RequestId
-					retryErr := waitForTaskFinish(requestId, meta.(tccommon.ProviderMeta).GetAPIV3Conn().UseClbClient())
-					if retryErr != nil {
-						return tccommon.RetryError(errors.WithStack(retryErr))
-					}
+		mRequest := clb.NewModifyLoadBalancerAttributesRequest()
+		mRequest.LoadBalancerId = helper.String(clbId)
+		mRequest.DeleteProtect = &isDeleteProect
+		err := resource.Retry(tccommon.WriteRetryTimeout, func() *resource.RetryError {
+			mResponse, e := meta.(tccommon.ProviderMeta).GetAPIV3Conn().UseClbClient().ModifyLoadBalancerAttributes(mRequest)
+			if e != nil {
+				return tccommon.RetryError(e)
+			} else {
+				log.Printf("[DEBUG]%s api[%s] success, request body [%s], response body [%s]\n",
+					logId, mRequest.GetAction(), mRequest.ToJsonString(), mResponse.ToJsonString())
+				requestId := *mResponse.Response.RequestId
+				retryErr := waitForTaskFinish(requestId, meta.(tccommon.ProviderMeta).GetAPIV3Conn().UseClbClient())
+				if retryErr != nil {
+					return tccommon.RetryError(errors.WithStack(retryErr))
 				}
-
-				return nil
-			})
-
-			if err != nil {
-				log.Printf("[CRITAL]%s create CLB instance failed, reason:%+v", logId, err)
-				return err
 			}
+
+			return nil
+		})
+
+		if err != nil {
+			log.Printf("[CRITAL]%s create CLB instance failed, reason:%+v", logId, err)
+			return err
 		}
 	}
 
@@ -827,9 +825,9 @@ func resourceTencentCloudClbInstanceUpdate(d *schema.ResourceData, meta interfac
 		request.SnatPro = &snatPro
 	}
 
-	if d.HasChange("delete_protect") {
+	if d.HasChange("deletion_protection") {
 		changed = true
-		isDeleteProtect = d.Get("delete_protect").(bool)
+		isDeleteProtect = d.Get("deletion_protection").(bool)
 		request.DeleteProtect = &isDeleteProtect
 	}
 
