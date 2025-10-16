@@ -576,6 +576,12 @@ func ResourceTencentCloudInstance() *schema.Resource {
 				return diff.Get("user_data_replace_on_change").(bool)
 			}),
 
+			customdiff.ForceNewIf("system_disk_size", func(_ context.Context, diff *schema.ResourceDiff, meta interface{}) bool {
+				// 系统盘缩容时发起销毁重建
+				oldSize, newSize := diff.GetChange("system_disk_size")
+				return newSize.(int) < oldSize.(int)
+			}),
+
 			func(ctx context.Context, d *schema.ResourceDiff, meta interface{}) error {
 				// delete 和 read 时不调用
 				_, newCandidates := d.GetChange("instance_type_candidates")
