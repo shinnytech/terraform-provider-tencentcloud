@@ -39,6 +39,7 @@ func ResourceTencentCloudMysqlAccount() *schema.Resource {
 				Type:        schema.TypeString,
 				Optional:    true,
 				Default:     MYSQL_DEFAULT_ACCOUNT_HOST,
+				ForceNew:    true,
 				Description: "Account host, default is `%`.",
 			},
 			"password": {
@@ -290,42 +291,6 @@ func resourceTencentCloudMysqlAccountUpdate(d *schema.ResourceData, meta interfa
 			return err
 		}
 
-	}
-
-	if d.HasChange("host") {
-		oldHost, newHost := d.GetChange("host")
-		asyncRequestId, err := mysqlService.ModifyAccountHost(ctx, mysqlId, accountName, oldHost.(string), newHost.(string))
-		if err != nil {
-			return err
-		}
-
-		err = resource.Retry(tccommon.ReadRetryTimeout, func() *resource.RetryError {
-			taskStatus, message, err := mysqlService.DescribeAsyncRequestInfo(ctx, asyncRequestId)
-			if err != nil {
-				return resource.NonRetryableError(err)
-			}
-			if taskStatus == MYSQL_TASK_STATUS_SUCCESS {
-				return nil
-			}
-			if taskStatus == MYSQL_TASK_STATUS_INITIAL || taskStatus == MYSQL_TASK_STATUS_RUNNING {
-				return resource.RetryableError(fmt.Errorf("%s modify account  host %s.%s task  status is %s", mysqlId, accountName, accountHost, taskStatus))
-			}
-			err = fmt.Errorf("modify mysql account host task status is %s,we won't wait for it finish ,it show message:%s", taskStatus, message)
-			return resource.NonRetryableError(err)
-		})
-
-		if err != nil {
-			log.Printf("[CRITAL]%s modify mysql account host fail, reason:%s\n ", logId, err.Error())
-			return err
-		}
-
-		resourceId := fmt.Sprintf("%s%s%s", mysqlId, tccommon.FILED_SP, accountName)
-
-		if newHost.(string) != MYSQL_DEFAULT_ACCOUNT_HOST {
-			resourceId += tccommon.FILED_SP + newHost.(string)
-		}
-
-		d.SetId(resourceId)
 	}
 
 	d.Partial(false)
