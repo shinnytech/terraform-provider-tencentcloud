@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"time"
 
 	tccommon "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/common"
@@ -3470,7 +3471,8 @@ func (me *MysqlService) DescribeMysqlDatabaseById(ctx context.Context, instanceI
 
 	request := cdb.NewDescribeDatabasesRequest()
 	request.InstanceId = &instanceId
-	request.DatabaseRegexp = &dBName
+	pattern := "^" + regexp.QuoteMeta(dBName) + "$"
+	request.DatabaseRegexp = &pattern
 
 	defer func() {
 		if errRet != nil {
