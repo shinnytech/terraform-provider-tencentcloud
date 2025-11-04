@@ -9,6 +9,7 @@ import (
 	dc "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/dc/v20180410"
 	tccommon "github.com/tencentcloudstack/terraform-provider-tencentcloud/tencentcloud/common"
 
+	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/customdiff"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 
@@ -103,7 +104,6 @@ func ResourceTencentCloudDcxInstance() *schema.Resource {
 			"route_filter_prefixes": {
 				Type:     schema.TypeSet,
 				Optional: true,
-				ForceNew: true,
 				Elem:     &schema.Schema{Type: schema.TypeString},
 				Set: func(v interface{}) int {
 					return helper.HashString(v.(string))
@@ -144,6 +144,11 @@ func ResourceTencentCloudDcxInstance() *schema.Resource {
 				Description: "Creation time of resource.",
 			},
 		},
+		CustomizeDiff: customdiff.All(
+			customdiff.ForceNewIf("route_filter_prefixes", func(_ context.Context, diff *schema.ResourceDiff, meta interface{}) bool {
+				return len(diff.Get("route_filter_prefixes").(*schema.Set).List()) == 0
+			}),
+		),
 	}
 }
 
@@ -382,11 +387,18 @@ func resourceTencentCloudDcxInstanceUpdate(d *schema.ResourceData, meta interfac
 		dcxId = d.Id()
 	)
 
-	if d.HasChange("name") {
+	if d.HasChange("name") || d.HasChange("route_filter_prefixes") {
 		request := dc.NewModifyDirectConnectTunnelAttributeRequest()
 		request.DirectConnectTunnelId = &dcxId
 		if v, ok := d.GetOk("name"); ok {
 			request.DirectConnectTunnelName = helper.String(v.(string))
+		}
+		if v, ok := d.GetOk("route_filter_prefixes"); ok {
+			for _, item := range v.(*schema.Set).List() {
+				var dcPrefix dc.RouteFilterPrefix
+				dcPrefix.Cidr = helper.String(item.(string))
+				request.RouteFilterPrefixes = append(request.RouteFilterPrefixes, &dcPrefix)
+			}
 		}
 
 		err := resource.Retry(tccommon.WriteRetryTimeout, func() *resource.RetryError {
