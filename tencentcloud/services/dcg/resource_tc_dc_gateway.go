@@ -39,7 +39,7 @@ func ResourceTencentCloudDcGatewayInstance() *schema.Resource {
 			},
 			"network_instance_id": {
 				Type:        schema.TypeString,
-				Required:    true,
+				Optional:    true,
 				ForceNew:    true,
 				Description: "If the `network_type` value is `VPC`, the available value is VPC ID. But when the `network_type` value is `CCN`, the available value is CCN instance ID.",
 			},
@@ -94,9 +94,10 @@ func resourceTencentCloudDcGatewayCreate(d *schema.ResourceData, meta interface{
 	}
 
 	if v, ok := d.GetOk("network_instance_id"); ok {
-		request.NetworkInstanceId = helper.String(v.(string))
 		networkInstanceId = v.(string)
 	}
+	// empty string for CCN as it's required by api
+	request.NetworkInstanceId = helper.String(networkInstanceId)
 
 	if v, ok := d.GetOk("gateway_type"); ok {
 		request.GatewayType = helper.String(v.(string))
@@ -107,8 +108,8 @@ func resourceTencentCloudDcGatewayCreate(d *schema.ResourceData, meta interface{
 		return fmt.Errorf("if `network_type` is '%s', the field `network_instance_id` must be a VPC resource", DCG_NETWORK_TYPE_VPC)
 	}
 
-	if networkType == DCG_NETWORK_TYPE_CCN && !strings.HasPrefix(networkInstanceId, "ccn") {
-		return fmt.Errorf("if `network_type` is '%s', the field `network_instance_id` must be a CCN resource", DCG_NETWORK_TYPE_CCN)
+	if networkType == DCG_NETWORK_TYPE_CCN && networkInstanceId != "" {
+		return fmt.Errorf("if `network_type` is '%s', the field `network_instance_id` must be empty", DCG_NETWORK_TYPE_CCN)
 	}
 
 	if networkType == DCG_NETWORK_TYPE_CCN && gatewayType != DCG_GATEWAY_TYPE_NORMAL {
@@ -166,11 +167,13 @@ func resourceTencentCloudDcGatewayRead(d *schema.ResourceData, meta interface{})
 
 		_ = d.Set("name", info.name)
 		_ = d.Set("network_type", info.networkType)
-		_ = d.Set("network_instance_id", info.networkInstanceId)
 		_ = d.Set("gateway_type", info.gatewayType)
 		_ = d.Set("cnn_route_type", info.cnnRouteType)
 		_ = d.Set("enable_bgp", info.enableBGP)
 		_ = d.Set("create_time", info.createTime)
+		if info.networkType != DCG_NETWORK_TYPE_CCN {
+			_ = d.Set("network_instance_id", info.networkInstanceId)
+		}
 		return nil
 	})
 
