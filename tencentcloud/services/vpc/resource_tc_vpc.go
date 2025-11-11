@@ -62,7 +62,6 @@ func ResourceTencentCloudVpcInstance() *schema.Resource {
 				Type:        schema.TypeSet,
 				Optional:    true,
 				Description: "List of Assistant CIDR, NOTE: Only `NORMAL` typed CIDRs included, check the Docker CIDR by readonly `assistant_docker_cidrs`.",
-				Computed:    true,
 				Elem: &schema.Schema{
 					Type: schema.TypeString,
 				},
