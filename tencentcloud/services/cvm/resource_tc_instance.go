@@ -2072,6 +2072,8 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 
 		request := cvm.NewResetInstanceRequest()
 		request.InstanceId = helper.String(d.Id())
+		// ResetInstance 不指定 HostName 会导致 HostName 被重置成随机值
+		request.HostName = helper.String(d.Get("hostname").(string))
 
 		if v, ok := d.GetOk("image_id"); ok {
 			request.ImageId = helper.String(v.(string))
