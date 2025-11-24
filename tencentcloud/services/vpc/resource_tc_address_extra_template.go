@@ -46,11 +46,6 @@ func ResourceTencentCloudAddressExtraTemplate() *schema.Resource {
 							Optional:    true,
 							Description: "Remarks.",
 						},
-						"updated_time": {
-							Type:        schema.TypeString,
-							Computed:    true,
-							Description: "Update Time.",
-						},
 					},
 				},
 				Description: "The address information can contain remarks and be presented by the IP, CIDR block or IP address range.",
@@ -170,9 +165,6 @@ func resourceTencentCloudAddressExtraTemplateRead(d *schema.ResourceData, meta i
 			}
 			if v.Description != nil {
 				addressExtraSet["description"] = *v.Description
-			}
-			if v.UpdatedTime != nil {
-				addressExtraSet["updated_time"] = *v.UpdatedTime
 			}
 
 			addressExtraSets = append(addressExtraSets, addressExtraSet)
