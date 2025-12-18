@@ -3018,6 +3018,10 @@ func (me *VpcService) describeEnis(
 			Name:   helper.String("address-ip"),
 			Values: []*string{ipv4},
 		})
+		request.Filters = append(request.Filters, &vpc.Filter{
+			Name:   helper.String("ip-exact-match"),
+			Values: []*string{helper.String("true")},
+		})
 	}
 
 	for k, v := range tags {
