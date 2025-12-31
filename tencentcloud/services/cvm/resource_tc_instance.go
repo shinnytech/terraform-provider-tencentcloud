@@ -1256,6 +1256,15 @@ func resourceTencentCloudInstanceRead(d *schema.ResourceData, meta interface{}) 
 		_ = d.Set("image_id", instance.ImageId)
 	}
 
+	// 如果用户使用了 instance_type_candidates 但实际的实例类型不在 candidates 中，则添加到 candidates 中
+	// 此时会触发 diff 从而触发 ForceNew
+	if v, ok := d.GetOk("instance_type_candidates"); ok {
+		candidates := helper.InterfacesStrings(v.([]interface{}))
+		if !tccommon.IsContains(candidates, *instance.InstanceType) {
+			_ = d.Set("instance_type_candidates", append(candidates, *instance.InstanceType))
+		}
+	}
+
 	_ = d.Set("availability_zone", instance.Placement.Zone)
 	_ = d.Set("dedicated_cluster_id", instance.DedicatedClusterId)
 	_ = d.Set("instance_name", instance.InstanceName)
