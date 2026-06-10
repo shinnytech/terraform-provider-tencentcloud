@@ -1862,6 +1862,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		ctx        = context.WithValue(context.TODO(), tccommon.LogIdKey, logId)
 		instanceId = d.Id()
 		cvmService = CvmService{client: meta.(tccommon.ProviderMeta).GetAPIV3Conn()}
+		reboot     = false
 	)
 
 	// recover instance power status
@@ -1881,6 +1882,39 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		} else {
 			return
 		}
+
+		if err != nil {
+			return
+		}
+		err = resource.Retry(2*tccommon.ReadRetryTimeout, func() *resource.RetryError {
+			instance, errRet := cvmService.DescribeInstanceById(ctx, instanceId)
+			if errRet != nil {
+				return tccommon.RetryError(errRet, tccommon.InternalError)
+			} else if *instance.InstanceState != target {
+				return resource.RetryableError(fmt.Errorf("cvm instance status is %s, retry...", *instance.InstanceState))
+			}
+			return nil
+		})
+	}()
+
+	// handle reboot
+	defer func() {
+		var instance *cvm.Instance
+		var target string
+		if err != nil || reboot == false {
+			return
+		} else if instance, err = cvmService.DescribeInstanceById(ctx, instanceId); err != nil {
+			return
+		} else if *instance.InstanceState != CVM_STATUS_RUNNING {
+			return
+		}
+		// reboot needed
+		// we only stop instance here because running flag normalization shall be performed afterward
+		// 如果 stopped_mode 为节省停机, running_flag 为 running, 这里理想起见应使用普通停机，
+		//     当前实现有可能导致节省停机后机器库存不足无法启动
+		// 如果 stopped_mode 为节省停机, running_flag 为 stopped, 这里理想起见应使用节省停机
+		err = cvmService.StopInstance(ctx, instanceId, d.Get("stopped_mode").(string))
+		target = CVM_STATUS_STOPPED
 
 		if err != nil {
 			return
@@ -2453,6 +2487,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		if err != nil {
 			return err
 		}
+		reboot = true
 	}
 
 	if d.HasChange("user_data_raw") {
@@ -2467,6 +2502,7 @@ func resourceTencentCloudInstanceUpdate(d *schema.ResourceData, meta interface{}
 		if err != nil {
 			return err
 		}
+		reboot = true
 	}
 
 	if d.HasChange("placement_group_id") || d.HasChange("force_replace_placement_group_id") {
